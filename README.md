@@ -1,5 +1,7 @@
 # Coven Agent Workspace
 
+Repository: `HermesAvatar`
+
 Coven is a local gothic adventure-game shell for a Hermes Agent workspace. It starts in an illustrated sanctuary with six configurable witch profiles, durable text conversations, a quest journal, explicit task assignment, local/API routing status, and a presentation-only Ophelia river failure scene.
 
 This first implementation is intentionally dependency-light: Python 3.11+ standard library for the loopback server and static browser assets for the UI. Live Hermes dispatch is gated behind a clear adapter boundary and currently fails visibly unless Hermes is available and the adapter is completed. Demo mode is explicit and separate.
