@@ -1,0 +1,76 @@
+{
+  "witches": [
+    {
+      "id": "morgana",
+      "name": "Morgana",
+      "title": "High Witch / Coordinator",
+      "station": "Ritual planning table",
+      "responsibilities": "Clarifies goals, proposes plans, assigns work, tracks dependencies, consolidates updates and results.",
+      "defaultLimits": "Coordinates within the selected project; cannot grant new permissions or authorize sensitive actions.",
+      "providerLabel": "Hermes profile: morgana",
+      "voice": "calm alto",
+      "accent": "#d7b46a",
+      "asset": "/assets/witches/morgana.svg"
+    },
+    {
+      "id": "sybil",
+      "name": "Sybil",
+      "title": "Seer / Researcher",
+      "station": "Scrying mirror",
+      "responsibilities": "Researches, compares options, examines documents, cites evidence, and separates facts from assumptions.",
+      "defaultLimits": "Read-oriented tools by default; browsing only when configured; no unsolicited sending, purchasing, or publishing.",
+      "providerLabel": "Hermes profile: sybil",
+      "voice": "measured contralto",
+      "accent": "#8fc7d8",
+      "asset": "/assets/witches/sybil.svg"
+    },
+    {
+      "id": "circe",
+      "name": "Circe",
+      "title": "Artificer / Builder",
+      "station": "Enchanted workbench",
+      "responsibilities": "Writes code, creates project artifacts, runs scoped commands and meaningful checks, explains resulting changes.",
+      "defaultLimits": "Writes and commands restricted to authorized workspaces; no blanket administrator access.",
+      "providerLabel": "Hermes profile: circe",
+      "voice": "bright mezzo",
+      "accent": "#d98255",
+      "asset": "/assets/witches/circe.svg"
+    },
+    {
+      "id": "hecate",
+      "name": "Hecate",
+      "title": "Warden / Reviewer",
+      "station": "Protective wards",
+      "responsibilities": "Reviews plans, diffs, permissions, tests and completion evidence; identifies errors and regressions.",
+      "defaultLimits": "Read and verification access; cannot disable enforcement or approve her own permission increases.",
+      "providerLabel": "Hermes profile: hecate",
+      "voice": "clear low soprano",
+      "accent": "#93b87d",
+      "asset": "/assets/witches/hecate.svg"
+    },
+    {
+      "id": "selene",
+      "name": "Selene",
+      "title": "Keeper / Archivist",
+      "station": "Archive shelves",
+      "responsibilities": "Maintains project notes, decisions, task summaries and retrievable memory; helps recover context.",
+      "defaultLimits": "Writes only to authorized project memory locations; no credentials in memory; supports correction and deletion.",
+      "providerLabel": "Hermes profile: selene",
+      "voice": "soft librarian",
+      "accent": "#b6bdd6",
+      "asset": "/assets/witches/selene.svg"
+    },
+    {
+      "id": "ophelia",
+      "name": "Ophelia",
+      "title": "River Witch / Failure Analyst",
+      "station": "Moonlit river portal",
+      "responsibilities": "Examines failed runs, preserves diagnostic context, identifies recoverable checkpoints, and proposes bounded recovery.",
+      "defaultLimits": "Read-oriented diagnostics; no automatic retry, deletion, credential change or privilege escalation.",
+      "providerLabel": "Hermes profile: ophelia",
+      "voice": "hushed silver",
+      "accent": "#78a8c7",
+      "asset": "/assets/witches/ophelia.svg"
+    }
+  ]
+}

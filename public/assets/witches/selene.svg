@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 480" role="img" aria-labelledby="title desc">
+  <title id="title">Selene portrait</title>
+  <desc id="desc">Adult witch archivist with moonlit book.</desc>
+  <rect width="360" height="480" fill="#141721"/>
+  <circle cx="180" cy="136" r="72" fill="#dbc4ad"/>
+  <path d="M82 430 C102 292 129 222 180 222 C231 222 258 292 278 430 Z" fill="#1e1d2a"/>
+  <path d="M98 164 C110 72 250 72 262 164 C220 116 140 116 98 164 Z" fill="#c6c5ca"/>
+  <path d="M110 168 C124 244 236 244 250 168 C226 232 134 232 110 168 Z" fill="#aeb1be"/>
+  <path d="M132 151 C148 162 162 162 178 151 M202 151 C218 162 232 162 248 151" stroke="#485066" stroke-width="6" fill="none"/>
+  <path d="M150 190 C172 204 196 204 220 190" stroke="#7a5457" stroke-width="6" fill="none"/>
+  <path d="M108 284 C136 262 162 262 180 284 C198 262 224 262 252 284 V348 C224 330 198 330 180 348 C162 330 136 330 108 348 Z" fill="#b6bdd6"/>
+  <path d="M180 284 V348" stroke="#616a86" stroke-width="4"/>
+</svg>

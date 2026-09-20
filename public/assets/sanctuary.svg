@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 720" role="img" aria-labelledby="title desc">
+  <title id="title">Coven sanctuary</title>
+  <desc id="desc">A gothic workroom with six witch stations, candles, a planning table, mirror, workbench, wards, archive shelves, and a river portal.</desc>
+  <defs>
+    <linearGradient id="wall" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#071019"/>
+      <stop offset="0.55" stop-color="#171423"/>
+      <stop offset="1" stop-color="#241a20"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" x2="1">
+      <stop offset="0" stop-color="#14171b"/>
+      <stop offset="0.5" stop-color="#24212b"/>
+      <stop offset="1" stop-color="#111b21"/>
+    </linearGradient>
+    <radialGradient id="candle" cx="50%" cy="45%" r="65%">
+      <stop offset="0" stop-color="#fff3b4"/>
+      <stop offset="0.28" stop-color="#d29b55"/>
+      <stop offset="1" stop-color="#7d3b2f" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+  </defs>
+  <rect width="1400" height="720" fill="url(#wall)"/>
+  <path d="M0 505 C260 455 490 455 700 505 C910 455 1140 455 1400 505 L1400 720 L0 720 Z" fill="url(#floor)"/>
+  <path d="M150 95 H1250 L1185 505 H215 Z" fill="#0f1722" opacity="0.72"/>
+  <path d="M220 145 H1180 L1130 490 H270 Z" fill="#1b1624" stroke="#4d5369" stroke-width="3"/>
+  <path d="M700 145 L700 500" stroke="#39364b" stroke-width="4" opacity="0.7"/>
+  <path d="M410 162 L355 490 M990 162 L1045 490" stroke="#30384c" stroke-width="4" opacity="0.65"/>
+
+  <g opacity="0.9">
+    <circle cx="700" cy="280" r="78" fill="#07131d" stroke="#8192a9" stroke-width="5"/>
+    <circle cx="700" cy="280" r="60" fill="#14273a" opacity="0.9"/>
+    <path d="M648 279 C680 242 720 242 752 279 C720 316 680 316 648 279 Z" fill="#70a8c3" opacity="0.5"/>
+  </g>
+
+  <g>
+    <ellipse cx="705" cy="548" rx="215" ry="50" fill="#0d0e13"/>
+    <path d="M520 516 C610 475 802 475 890 516 L850 570 C770 602 640 602 560 570 Z" fill="#3a2630" stroke="#806f57" stroke-width="4"/>
+    <path d="M590 512 C646 490 759 490 820 512" stroke="#d7b46a" stroke-width="4" opacity="0.75"/>
+    <circle cx="650" cy="532" r="12" fill="#d7b46a"/>
+    <circle cx="760" cy="532" r="12" fill="#78a8c7"/>
+  </g>
+
+  <g>
+    <rect x="120" y="330" width="150" height="130" rx="6" fill="#251c25" stroke="#806f57" stroke-width="3"/>
+    <path d="M135 350 H255 M135 382 H255 M135 414 H255" stroke="#b6bdd6" stroke-width="7" opacity="0.55"/>
+    <rect x="138" y="452" width="118" height="10" fill="#d7b46a"/>
+  </g>
+
+  <g>
+    <path d="M1095 205 C1180 240 1222 320 1200 424 C1140 455 1080 443 1034 390 C1055 300 1065 248 1095 205 Z" fill="#10212d" stroke="#78a8c7" stroke-width="4"/>
+    <path d="M1060 385 C1110 350 1160 358 1196 395" stroke="#a9d7e8" stroke-width="6" opacity="0.55"/>
+    <path d="M1055 420 C1115 390 1162 404 1202 430" stroke="#70a8c3" stroke-width="4" opacity="0.7"/>
+  </g>
+
+  <g>
+    <path d="M920 375 C965 335 1020 335 1065 375" fill="none" stroke="#93b87d" stroke-width="7"/>
+    <path d="M942 370 L993 325 L1042 370" fill="none" stroke="#93b87d" stroke-width="4" opacity="0.8"/>
+    <circle cx="993" cy="371" r="44" fill="none" stroke="#93b87d" stroke-width="3" opacity="0.65"/>
+  </g>
+
+  <g>
+    <rect x="300" y="384" width="170" height="78" rx="5" fill="#251818" stroke="#806f57" stroke-width="3"/>
+    <path d="M322 384 V325 H448 V384" fill="#18151c" stroke="#806f57" stroke-width="3"/>
+    <path d="M338 350 H432 M354 374 H416" stroke="#d98255" stroke-width="8" opacity="0.75"/>
+    <circle cx="385" cy="322" r="16" fill="#d98255"/>
+  </g>
+
+  <g opacity="0.7" filter="url(#soft)">
+    <circle cx="310" cy="285" r="48" fill="url(#candle)"/>
+    <circle cx="1090" cy="300" r="54" fill="url(#candle)"/>
+    <circle cx="704" cy="511" r="68" fill="url(#candle)"/>
+  </g>
+
+  <g fill="#d7b46a">
+    <rect x="303" y="297" width="10" height="42" rx="4"/>
+    <path d="M308 288 C298 302 320 303 308 288 Z"/>
+    <rect x="1083" y="314" width="10" height="44" rx="4"/>
+    <path d="M1088 304 C1078 319 1100 320 1088 304 Z"/>
+    <rect x="696" y="456" width="10" height="45" rx="4"/>
+    <path d="M701 445 C690 462 714 462 701 445 Z"/>
+  </g>
+</svg>

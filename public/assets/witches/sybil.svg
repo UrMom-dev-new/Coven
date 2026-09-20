@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 480" role="img" aria-labelledby="title desc">
+  <title id="title">Sybil portrait</title>
+  <desc id="desc">Adult witch researcher with scrying mirror light.</desc>
+  <rect width="360" height="480" fill="#0b1722"/>
+  <circle cx="180" cy="136" r="72" fill="#d7bdac"/>
+  <path d="M88 430 C104 294 128 224 180 224 C232 224 256 294 272 430 Z" fill="#142331"/>
+  <path d="M104 160 C116 72 244 72 256 160 C218 118 142 118 104 160 Z" fill="#1e2333"/>
+  <path d="M108 166 C122 246 238 246 252 166 C226 214 134 214 108 166 Z" fill="#202538"/>
+  <circle cx="180" cy="287" r="38" fill="#10283a" stroke="#8fc7d8" stroke-width="8"/>
+  <path d="M152 151 C166 160 180 160 194 151 M204 151 C218 160 232 160 246 151" stroke="#273849" stroke-width="6" fill="none"/>
+  <path d="M153 190 C174 202 196 202 217 190" stroke="#67434d" stroke-width="5" fill="none"/>
+  <path d="M147 287 C166 266 194 266 213 287 C194 308 166 308 147 287 Z" fill="#8fc7d8" opacity="0.6"/>
+</svg>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 480" role="img" aria-labelledby="title desc">
+  <title id="title">Hecate portrait</title>
+  <desc id="desc">Adult witch reviewer with protective ward.</desc>
+  <rect width="360" height="480" fill="#101913"/>
+  <circle cx="180" cy="136" r="72" fill="#cfb7a2"/>
+  <path d="M83 430 C103 292 130 222 180 222 C230 222 257 292 277 430 Z" fill="#172318"/>
+  <path d="M98 164 C118 74 242 74 262 164 C226 132 134 132 98 164 Z" fill="#151915"/>
+  <path d="M112 168 C130 236 230 236 248 168 C226 222 134 222 112 168 Z" fill="#22291f"/>
+  <path d="M133 151 C149 162 163 162 179 151 M201 151 C217 162 231 162 247 151" stroke="#334433" stroke-width="6" fill="none"/>
+  <path d="M150 190 C172 204 196 204 220 190" stroke="#674447" stroke-width="6" fill="none"/>
+  <circle cx="180" cy="298" r="46" fill="none" stroke="#93b87d" stroke-width="8"/>
+  <path d="M180 252 L220 322 H140 Z" fill="none" stroke="#93b87d" stroke-width="6"/>
+</svg>

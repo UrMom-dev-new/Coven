@@ -1,0 +1,13 @@
+[project]
+name = "coven-agent-workspace"
+version = "0.1.0"
+description = "Local gothic adventure-game workspace shell for Hermes Agent."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+coven-workspace = "coven.server:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

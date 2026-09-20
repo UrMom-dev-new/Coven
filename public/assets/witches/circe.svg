@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 480" role="img" aria-labelledby="title desc">
+  <title id="title">Circe portrait</title>
+  <desc id="desc">Adult witch builder with rune tool and copper glow.</desc>
+  <rect width="360" height="480" fill="#161110"/>
+  <circle cx="180" cy="136" r="72" fill="#d6b198"/>
+  <path d="M82 430 C102 292 128 222 180 222 C232 222 258 292 278 430 Z" fill="#2a1817"/>
+  <path d="M100 164 C112 65 248 65 260 164 C226 128 134 128 100 164 Z" fill="#2b1717"/>
+  <path d="M112 172 C124 238 236 238 248 172 C228 220 132 220 112 172 Z" fill="#3a1c17"/>
+  <path d="M132 152 C148 162 162 162 178 152 M202 152 C218 162 232 162 248 152" stroke="#4b2f2b" stroke-width="6" fill="none"/>
+  <path d="M150 190 C172 207 196 207 220 190" stroke="#7d3e34" stroke-width="6" fill="none"/>
+  <path d="M106 318 L244 250 L260 282 L122 350 Z" fill="#d98255"/>
+  <path d="M138 302 L174 284 M188 277 L224 259" stroke="#fff0bd" stroke-width="5" opacity="0.55"/>
+</svg>

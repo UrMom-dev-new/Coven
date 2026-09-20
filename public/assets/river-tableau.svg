@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Ophelia river failure tableau</title>
+  <desc id="desc">A moonlit river beneath willow branches, with flowers and a pale cloak beneath the surface.</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#050b14"/>
+      <stop offset="0.6" stop-color="#102030"/>
+      <stop offset="1" stop-color="#071018"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0" x2="1">
+      <stop offset="0" stop-color="#0b2330"/>
+      <stop offset="0.5" stop-color="#173f52"/>
+      <stop offset="1" stop-color="#071923"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#sky)"/>
+  <circle cx="992" cy="118" r="54" fill="#d9e5ef"/>
+  <path d="M0 415 C180 368 350 398 520 380 C740 356 970 344 1280 380 L1280 720 L0 720 Z" fill="url(#water)"/>
+  <path d="M0 465 C238 424 430 474 650 444 C880 412 1084 452 1280 430" fill="none" stroke="#8fc7d8" stroke-width="6" opacity="0.28"/>
+  <path d="M0 528 C290 484 480 538 720 500 C940 466 1102 502 1280 488" fill="none" stroke="#d9e5ef" stroke-width="4" opacity="0.14"/>
+  <path d="M100 0 C152 140 132 258 86 385" stroke="#182614" stroke-width="22" fill="none"/>
+  <path d="M115 0 C258 88 284 220 252 380" stroke="#182614" stroke-width="18" fill="none"/>
+  <g stroke="#2d5035" stroke-width="6" opacity="0.75">
+    <path d="M148 18 C188 150 184 244 146 360"/>
+    <path d="M195 45 C218 170 214 270 184 404"/>
+    <path d="M242 86 C278 195 286 290 250 430"/>
+  </g>
+  <g opacity="0.82">
+    <path d="M610 545 C690 505 790 512 858 560 C794 602 684 604 610 545 Z" fill="#cfd7e6" opacity="0.72"/>
+    <path d="M628 528 C674 508 723 514 762 540" stroke="#78a8c7" stroke-width="8" opacity="0.42" fill="none"/>
+    <path d="M768 554 C804 542 836 552 864 580" stroke="#101923" stroke-width="13" opacity="0.55"/>
+    <circle cx="602" cy="536" r="18" fill="#e5dfd4" opacity="0.85"/>
+  </g>
+  <g fill="#d7b46a" opacity="0.75">
+    <ellipse cx="420" cy="492" rx="16" ry="6" transform="rotate(-12 420 492)"/>
+    <ellipse cx="930" cy="462" rx="14" ry="5" transform="rotate(16 930 462)"/>
+    <ellipse cx="1040" cy="526" rx="18" ry="7" transform="rotate(-8 1040 526)"/>
+  </g>
+</svg>

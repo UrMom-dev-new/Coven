@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Coven Agent Workspace</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hud" aria-label="Workspace status">
+        <div>
+          <p class="eyebrow">Local agent sanctuary</p>
+          <h1>Coven</h1>
+        </div>
+        <dl class="hud-readouts">
+          <div>
+            <dt>Service</dt>
+            <dd id="connectionState">Checking</dd>
+          </div>
+          <div>
+            <dt>Runtime</dt>
+            <dd id="runtimeRoute">Unknown</dd>
+          </div>
+          <div>
+            <dt>Local/API</dt>
+            <dd id="providerRoute">Unknown</dd>
+          </div>
+          <div>
+            <dt>Selected</dt>
+            <dd id="selectedWitchName">Morgana</dd>
+          </div>
+        </dl>
+        <div class="hud-controls" aria-label="Presentation controls">
+          <label><input id="toggleMute" type="checkbox" /> Mute</label>
+          <label><input id="toggleCinematics" type="checkbox" checked /> Failure scenes</label>
+          <label>
+            Motion
+            <select id="motionMode">
+              <option value="full">Full</option>
+              <option value="tableau">Tableau</option>
+              <option value="off">Off</option>
+            </select>
+          </label>
+          <label>
+            Quality
+            <select id="qualityMode">
+              <option value="balanced">Balanced</option>
+              <option value="low">Low</option>
+            </select>
+          </label>
+        </div>
+      </header>
+
+      <main class="workspace" id="workspace">
+        <section class="sanctuary-panel" aria-labelledby="sanctuaryTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Playable workspace</p>
+              <h2 id="sanctuaryTitle">The Sanctuary</h2>
+            </div>
+            <button id="compactToggle" class="ghost-button" type="button">Compact work view</button>
+          </div>
+          <div class="sanctuary-stage">
+            <img src="/assets/sanctuary.svg" alt="Gothic coven room with six witch workstations" />
+            <div id="hotspots" class="hotspots" aria-label="Witch stations"></div>
+          </div>
+          <nav id="roster" class="roster" aria-label="Witch roster"></nav>
+          <div id="systemNotice" class="system-notice" role="status"></div>
+        </section>
+
+        <section class="dialogue-panel" aria-labelledby="dialogueTitle">
+          <div class="character-frame">
+            <img id="portrait" src="/assets/witches/morgana.svg" alt="Morgana portrait" />
+            <div>
+              <p id="witchTitle" class="eyebrow">High Witch / Coordinator</p>
+              <h2 id="dialogueTitle">Morgana</h2>
+              <p id="witchRole" class="role-copy"></p>
+              <p id="providerLabel" class="provider-label">Hermes profile: morgana</p>
+            </div>
+          </div>
+
+          <div class="transcript-wrap">
+            <div class="subheading-row">
+              <h3>Conversation</h3>
+              <span id="voiceState" class="inline-state">Text ready</span>
+            </div>
+            <ol id="transcript" class="transcript" aria-label="Conversation history"></ol>
+          </div>
+
+          <form id="messageForm" class="composer">
+            <label for="messageInput">Message</label>
+            <textarea id="messageInput" rows="3" placeholder="Talk with the selected witch. This does not assign executable work."></textarea>
+            <div class="action-row">
+              <button type="submit">Send message</button>
+              <button id="recordButton" type="button" class="secondary-button">Push to talk</button>
+              <button id="stopSpeakingButton" type="button" class="secondary-button">Stop speech</button>
+            </div>
+          </form>
+
+          <form id="taskForm" class="task-form">
+            <div class="subheading-row">
+              <h3>Assign Quest / Task</h3>
+              <span id="taskingState" class="inline-state">Live mode checks Hermes</span>
+            </div>
+            <label for="taskTitle">Task title</label>
+            <input id="taskTitle" type="text" placeholder="A bounded task with a concrete result" />
+            <label for="taskInstructions">Instructions</label>
+            <textarea id="taskInstructions" rows="4" placeholder="Describe the work, constraints, and verification evidence."></textarea>
+            <label for="taskPriority">Priority</label>
+            <select id="taskPriority">
+              <option value="normal">Normal</option>
+              <option value="high">High</option>
+              <option value="low">Low</option>
+            </select>
+            <button type="submit">Assign task</button>
+          </form>
+        </section>
+
+        <section class="journal-panel" aria-labelledby="journalTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Quest journal</p>
+              <h2 id="journalTitle">Tasks</h2>
+            </div>
+            <span id="taskCount" class="counter">0</span>
+          </div>
+          <div id="taskList" class="task-list" aria-label="Task list"></div>
+          <article id="taskDetail" class="task-detail" aria-live="polite">
+            <p>Select a task to inspect its timeline, blockers, evidence, and recovery actions.</p>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <section id="failureOverlay" class="failure-overlay" aria-modal="true" aria-labelledby="failureTitle" role="dialog" hidden>
+      <div class="failure-toolbar">
+        <span>Terminal failure scene</span>
+        <div>
+          <button id="skipSceneButton" type="button">Skip</button>
+          <button id="skipAllButton" type="button" class="secondary-button">Skip all</button>
+        </div>
+      </div>
+      <div id="riverScene" class="river-scene" aria-label="Ophelia river cinematic">
+        <img src="/assets/river-tableau.svg" alt="" />
+        <div class="rain"></div>
+        <div class="ophelia-figure" aria-hidden="true">
+          <span class="head"></span>
+          <span class="cloak"></span>
+          <span class="hand"></span>
+        </div>
+        <div class="waterline"></div>
+        <p id="sceneCaption" class="scene-caption">
+          Moonlit water closes over Ophelia. The report is ready.
+        </p>
+      </div>
+      <article id="failureReport" class="failure-report" hidden>
+        <p class="eyebrow">Failure report</p>
+        <h2 id="failureTitle">Failed quest</h2>
+        <dl>
+          <div><dt>Responsible agent</dt><dd id="failedAssignee"></dd></div>
+          <div><dt>Error</dt><dd id="failedError"></dd></div>
+          <div><dt>Last successful step</dt><dd id="failedStep"></dd></div>
+        </dl>
+        <div class="action-row">
+          <button id="inspectFailureButton" type="button">Inspect error</button>
+          <button id="retryFailureButton" type="button">Retry</button>
+          <button id="reassignFailureButton" type="button" class="secondary-button">Reassign</button>
+          <button id="returnFailureButton" type="button" class="secondary-button">Return to coven</button>
+        </div>
+      </article>
+    </section>
+
+    <script src="/src/app.js" type="module"></script>
+  </body>
+</html>

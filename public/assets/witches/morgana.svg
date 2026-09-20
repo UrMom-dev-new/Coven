@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 480" role="img" aria-labelledby="title desc">
+  <title id="title">Morgana portrait</title>
+  <desc id="desc">Adult witch coordinator with circlet and ritual table colors.</desc>
+  <rect width="360" height="480" fill="#10131b"/>
+  <circle cx="180" cy="136" r="74" fill="#d8c2a4"/>
+  <path d="M90 430 C108 300 127 222 180 222 C233 222 252 300 270 430 Z" fill="#241728"/>
+  <path d="M102 168 C118 70 240 70 258 168 C232 142 128 142 102 168 Z" fill="#151019"/>
+  <path d="M104 172 C128 214 232 214 256 172 C240 260 120 260 104 172 Z" fill="#171019"/>
+  <path d="M130 105 H230 L210 86 L180 103 L150 86 Z" fill="none" stroke="#d7b46a" stroke-width="8" stroke-linejoin="round"/>
+  <path d="M136 151 C152 162 166 162 182 151 M198 151 C214 162 228 162 244 151" stroke="#3b2a2d" stroke-width="6" fill="none"/>
+  <path d="M150 190 C172 206 195 206 218 190" stroke="#6d3c43" stroke-width="6" fill="none"/>
+  <circle cx="180" cy="268" r="24" fill="#d7b46a"/>
+  <path d="M132 300 H228" stroke="#806f57" stroke-width="10"/>
+</svg>
