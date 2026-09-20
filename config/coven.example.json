@@ -7,6 +7,8 @@
   "runtime": {
     "mode": "live",
     "hermesExecutable": "hermes",
+    "hermesApiBaseUrl": "http://127.0.0.1:8642",
+    "hermesApiKeyEnvironmentVariable": "HERMES_API_SERVER_KEY",
     "hermesBoard": "coven",
     "allowDemoMode": true
   },

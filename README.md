@@ -14,10 +14,25 @@ From the repository root:
 python -m coven.server --host 127.0.0.1 --port 8765 --open
 ```
 
+The server prints a one-time development unlock token. Enter it in the browser page to create an authenticated local session. Private API reads and writes require that session cookie.
+
 Windows launcher:
 
 ```powershell
 .\scripts\start-coven.ps1 -Open
+```
+
+Desktop shell:
+
+```powershell
+python -m pip install -e ".[desktop]"
+python -m coven.desktop
+```
+
+Portable Windows build:
+
+```powershell
+.\scripts\build-windows.ps1 -Clean
 ```
 
 Demo fixture mode for UI and cinematic testing:
@@ -56,3 +71,10 @@ python3 -m unittest discover -s tests
 - The bundled art is original lightweight SVG, not final generated bitmap/video production art.
 
 See `docs/integration-note.md`, `docs/permission-matrix.md`, and `docs/validation.md` for the implementation contract and remaining gates.
+
+Additional beta docs:
+
+- `docs/product-contract.md`
+- `docs/desktop-build.md`
+- `docs/hermes-compatibility.md`
+- `docs/windows-beta-acceptance.md`

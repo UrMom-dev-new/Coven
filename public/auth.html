@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Unlock Coven</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="auth-body">
+    <main class="auth-panel" aria-labelledby="authTitle">
+      <p class="eyebrow">Local session</p>
+      <h1 id="authTitle">Unlock Coven</h1>
+      <p>
+        Enter the one-time development token printed by the local Coven server. The token is not stored in the browser and is not placed in the URL.
+      </p>
+      <form id="authForm">
+        <label for="authToken">Development token</label>
+        <input id="authToken" type="password" autocomplete="one-time-code" />
+        <button type="submit">Start session</button>
+      </form>
+      <button id="desktopUnlock" type="button" hidden>Use desktop session</button>
+      <p id="authNotice" class="system-notice" role="status"></p>
+    </main>
+    <script src="/src/auth.js" type="module"></script>
+  </body>
+</html>

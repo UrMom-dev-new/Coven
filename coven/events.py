@@ -45,19 +45,15 @@ def normalize_runtime_event(raw: dict[str, Any]) -> NormalizedEvent:
     status = str(raw.get("status") or raw.get("state") or "").strip().lower()
     reason = str(raw.get("reason") or raw.get("category") or "").strip().lower()
     outcome = str(raw.get("outcome_kind") or raw.get("outcomeKind") or "").strip().lower()
-    terminal = bool(raw.get("terminal") or raw.get("is_terminal") or raw.get("isTerminal"))
-    retry_exhausted = bool(
-        raw.get("retry_policy_exhausted")
-        or raw.get("retryPolicyExhausted")
-        or raw.get("retries_exhausted")
+    terminal = _strict_bool(raw.get("terminal", raw.get("is_terminal", raw.get("isTerminal"))))
+    retry_exhausted = _strict_bool(
+        raw.get("retry_policy_exhausted", raw.get("retryPolicyExhausted", raw.get("retries_exhausted")))
     )
 
     if reason in NON_TERMINAL_REASONS:
         outcome_kind = reason
     elif outcome:
         outcome_kind = outcome
-    elif status == "failed" and terminal and retry_exhausted:
-        outcome_kind = "terminal_failure"
     else:
         outcome_kind = status or "unknown"
 
@@ -89,6 +85,10 @@ def should_trigger_failure_cinematic(raw: dict[str, Any], shown_event_ids: set[s
         and event.terminal
         and event.retry_policy_exhausted
     )
+
+
+def _strict_bool(value: Any) -> bool:
+    return value is True
 
 
 def event_to_dict(event: NormalizedEvent) -> dict[str, Any]:

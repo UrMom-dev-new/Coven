@@ -1,7 +1,8 @@
 param(
   [int]$Port = 8765,
   [switch]$Demo,
-  [switch]$Open
+  [switch]$Open,
+  [switch]$Desktop
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,6 +31,11 @@ if ($Demo) {
 }
 
 Set-Location $Repo
-$Args = @("-m", "coven.server", "--host", "127.0.0.1", "--port", "$Port")
-if ($Open) { $Args += "--open" }
+$Module = "coven.server"
+if ($Desktop) {
+  $Module = "coven.desktop"
+}
+$Args = @("-m", $Module, "--port", "$Port")
+if (-not $Desktop) { $Args = @("-m", $Module, "--host", "127.0.0.1", "--port", "$Port") }
+if ($Open -and -not $Desktop) { $Args += "--open" }
 & $Python.Source $Args

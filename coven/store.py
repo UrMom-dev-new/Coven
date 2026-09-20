@@ -10,17 +10,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .configuration import (
+    VALID_MOTION_MODES,
+    VALID_QUALITIES,
+    ConfigError,
+    validate_identifier,
+    validate_priority,
+    validate_profiles_file,
+)
 from .events import event_to_dict, normalize_runtime_event, should_trigger_failure_cinematic
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def load_profiles(config_path: Path) -> list[dict[str, Any]]:
-    with config_path.open("r", encoding="utf-8") as handle:
-        data = json.load(handle)
-    return data["witches"]
 
 
 class CovenStore:
@@ -29,31 +31,89 @@ class CovenStore:
         self.profile_path = profile_path
         self.state_path = data_dir / "state.json"
         self._lock = threading.RLock()
+        self._profiles = validate_profiles_file(profile_path)
+        self.profile_ids = {item["id"] for item in self._profiles}
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self._ensure_state()
 
     def _ensure_state(self) -> None:
-        if self.state_path.exists():
+        if not self.state_path.exists():
+            self._write(self._new_state())
             return
-        initial = {
-            "version": 1,
+        existing = self._read_raw()
+        migrated = self._migrate_state(existing)
+        if migrated is not existing:
+            backup = self.state_path.with_suffix(f".v1-backup-{utc_now().replace(':', '')}.json")
+            self.state_path.replace(backup)
+            self._write(migrated)
+
+    def _new_state(self) -> dict[str, Any]:
+        return {
+            "version": 2,
             "createdAt": utc_now(),
-            "tasks": [],
-            "conversations": {},
-            "events": [],
-            "cinematics": {"shownEventIds": [], "skippedEventIds": []},
-            "settings": {
+            "preferences": {
                 "cinematicsEnabled": True,
                 "reducedMotionMode": "tableau",
                 "mute": False,
                 "animationQuality": "balanced",
             },
+            "namespaces": {
+                "demo": self._empty_namespace("demo"),
+                "live": self._empty_namespace("live"),
+            },
         }
-        self._write(initial)
 
-    def _read(self) -> dict[str, Any]:
+    def _empty_namespace(self, name: str) -> dict[str, Any]:
+        return {
+            "name": name,
+            "tasks": [],
+            "conversations": {},
+            "events": [],
+            "cinematics": {"shownEventIds": [], "skippedEventIds": []},
+        }
+
+    def _migrate_state(self, state: dict[str, Any]) -> dict[str, Any]:
+        if state.get("version") == 2 and isinstance(state.get("namespaces"), dict):
+            changed = False
+            for namespace in ("demo", "live"):
+                if namespace not in state["namespaces"]:
+                    state["namespaces"][namespace] = self._empty_namespace(namespace)
+                    changed = True
+            if "preferences" not in state:
+                state["preferences"] = self._preferences_from(state)
+                changed = True
+            return deepcopy(state) if changed else state
+
+        migrated = self._new_state()
+        demo = migrated["namespaces"]["demo"]
+        demo["tasks"] = deepcopy(state.get("tasks", []))
+        demo["conversations"] = deepcopy(state.get("conversations", {}))
+        demo["events"] = deepcopy(state.get("events", []))
+        demo["cinematics"] = deepcopy(state.get("cinematics", {"shownEventIds": [], "skippedEventIds": []}))
+        migrated["preferences"] = self._preferences_from(state)
+        migrated["migratedFromVersion"] = state.get("version", "unknown")
+        migrated["migratedAt"] = utc_now()
+        return migrated
+
+    def _preferences_from(self, state: dict[str, Any]) -> dict[str, Any]:
+        raw = state.get("settings", state.get("preferences", {}))
+        if not isinstance(raw, dict):
+            raw = {}
+        motion = raw.get("reducedMotionMode")
+        quality = raw.get("animationQuality")
+        return {
+            "cinematicsEnabled": raw.get("cinematicsEnabled") is not False,
+            "reducedMotionMode": motion if motion in VALID_MOTION_MODES else "tableau",
+            "mute": raw.get("mute") is True,
+            "animationQuality": quality if quality in VALID_QUALITIES else "balanced",
+        }
+
+    def _read_raw(self) -> dict[str, Any]:
         with self.state_path.open("r", encoding="utf-8") as handle:
             return json.load(handle)
+
+    def _read(self) -> dict[str, Any]:
+        return self._migrate_state(self._read_raw())
 
     def _write(self, state: dict[str, Any]) -> None:
         tmp = self.state_path.with_suffix(".json.tmp")
@@ -62,30 +122,38 @@ class CovenStore:
             handle.write("\n")
         tmp.replace(self.state_path)
 
-    def snapshot(self, *, demo_mode: bool = False) -> dict[str, Any]:
+    def snapshot(self, *, namespace: str, advance_demo: bool = False) -> dict[str, Any]:
+        namespace = self._namespace_name(namespace)
         with self._lock:
             state = self._read()
-            if demo_mode:
-                changed = self._advance_demo_tasks(state)
+            scope = state["namespaces"][namespace]
+            if namespace == "demo" and advance_demo:
+                changed = self._advance_demo_tasks(scope)
                 if changed:
                     self._write(state)
-            return deepcopy(state)
+            return deepcopy(scope)
 
     def profiles(self) -> list[dict[str, Any]]:
-        return load_profiles(self.profile_path)
+        return deepcopy(self._profiles)
 
-    def conversations(self, witch_id: str) -> list[dict[str, Any]]:
+    def conversations(self, witch_id: str, *, namespace: str) -> list[dict[str, Any]]:
+        witch_id = self._profile_id(witch_id)
+        namespace = self._namespace_name(namespace)
         with self._lock:
             state = self._read()
-            return deepcopy(state["conversations"].get(witch_id, []))
+            return deepcopy(state["namespaces"][namespace]["conversations"].get(witch_id, []))
 
-    def append_message(self, witch_id: str, author: str, text: str) -> list[dict[str, Any]]:
-        text = text.strip()
+    def append_message(self, witch_id: str, author: str, text: str, *, namespace: str) -> list[dict[str, Any]]:
+        witch_id = self._profile_id(witch_id)
+        namespace = self._namespace_name(namespace)
+        if author != "user":
+            author = self._profile_id(author)
+        text = self._bounded_text(text, "Message", max_length=8000).strip()
         if not text:
             raise ValueError("Message cannot be empty.")
         with self._lock:
             state = self._read()
-            thread = state["conversations"].setdefault(witch_id, [])
+            thread = state["namespaces"][namespace]["conversations"].setdefault(witch_id, [])
             thread.append(
                 {
                     "id": f"msg-{uuid.uuid4().hex}",
@@ -98,9 +166,13 @@ class CovenStore:
             return deepcopy(thread)
 
     def create_task(self, *, assignee: str, title: str, instructions: str, priority: str) -> dict[str, Any]:
-        title = title.strip()
+        assignee = self._profile_id(assignee)
+        priority = validate_priority(priority)
+        title = self._bounded_text(title, "Task title", max_length=160).strip()
+        instructions = self._bounded_text(instructions, "Task instructions", max_length=16000).strip()
         if not title:
             raise ValueError("Task title is required.")
+
         now = utc_now()
         task_id = f"task-{uuid.uuid4().hex[:12]}"
         attempt_id = f"{task_id}-attempt-1"
@@ -111,10 +183,10 @@ class CovenStore:
             "attemptId": attempt_id,
             "parentTaskId": None,
             "title": title,
-            "instructions": instructions.strip(),
+            "instructions": instructions,
             "assignee": assignee,
             "status": "queued",
-            "priority": priority or "normal",
+            "priority": priority,
             "mode": "demo",
             "createdAt": now,
             "updatedAt": now,
@@ -139,14 +211,16 @@ class CovenStore:
         }
         with self._lock:
             state = self._read()
-            state["tasks"].insert(0, task)
+            state["namespaces"]["demo"]["tasks"].insert(0, task)
             self._write(state)
             return deepcopy(task)
 
-    def retry_task(self, task_id: str) -> dict[str, Any]:
+    def retry_task(self, task_id: str, *, namespace: str) -> dict[str, Any]:
+        namespace = self._namespace_name(namespace)
         with self._lock:
             state = self._read()
-            original = next((task for task in state["tasks"] if task["id"] == task_id), None)
+            tasks = state["namespaces"][namespace]["tasks"]
+            original = next((task for task in tasks if task["id"] == task_id), None)
             if original is None:
                 raise KeyError(task_id)
             if original["status"] != "failed":
@@ -175,33 +249,68 @@ class CovenStore:
                     "timestamp": now,
                 }
             ]
-            state["tasks"].insert(0, new_task)
+            tasks.insert(0, new_task)
             self._write(state)
             return deepcopy(new_task)
 
-    def pending_failure_events(self) -> list[dict[str, Any]]:
+    def pending_failure_events(self, *, namespace: str) -> list[dict[str, Any]]:
+        namespace = self._namespace_name(namespace)
         with self._lock:
             state = self._read()
-            shown = set(state.get("cinematics", {}).get("shownEventIds", []))
-            skipped = set(state.get("cinematics", {}).get("skippedEventIds", []))
+            scope = state["namespaces"][namespace]
+            shown = set(scope.get("cinematics", {}).get("shownEventIds", []))
+            skipped = set(scope.get("cinematics", {}).get("skippedEventIds", []))
             blocked = shown | skipped
             pending = []
-            for event in state["events"]:
+            for event in scope["events"]:
                 if should_trigger_failure_cinematic(event, blocked):
                     pending.append(event_to_dict(normalize_runtime_event(event)))
             return pending
 
-    def mark_cinematic(self, event_id: str, disposition: str) -> dict[str, Any]:
+    def mark_cinematic(self, event_id: str, disposition: str, *, namespace: str) -> dict[str, Any]:
+        namespace = self._namespace_name(namespace)
         if disposition not in {"shown", "skipped"}:
             raise ValueError("Disposition must be shown or skipped.")
         key = "shownEventIds" if disposition == "shown" else "skippedEventIds"
         with self._lock:
             state = self._read()
-            ids = state.setdefault("cinematics", {}).setdefault(key, [])
+            ids = state["namespaces"][namespace].setdefault("cinematics", {}).setdefault(key, [])
             if event_id not in ids:
                 ids.append(event_id)
             self._write(state)
-            return deepcopy(state["cinematics"])
+            return deepcopy(state["namespaces"][namespace]["cinematics"])
+
+    def preferences(self) -> dict[str, Any]:
+        with self._lock:
+            return deepcopy(self._read()["preferences"])
+
+    def update_preferences(self, updates: dict[str, Any]) -> dict[str, Any]:
+        allowed = {"cinematicsEnabled", "reducedMotionMode", "mute", "animationQuality"}
+        unknown = sorted(set(updates) - allowed)
+        if unknown:
+            raise ValueError(f"Unknown preference field(s): {', '.join(unknown)}.")
+
+        with self._lock:
+            state = self._read()
+            prefs = state["preferences"]
+            if "cinematicsEnabled" in updates:
+                if not isinstance(updates["cinematicsEnabled"], bool):
+                    raise ValueError("cinematicsEnabled must be a boolean.")
+                prefs["cinematicsEnabled"] = updates["cinematicsEnabled"]
+            if "mute" in updates:
+                if not isinstance(updates["mute"], bool):
+                    raise ValueError("mute must be a boolean.")
+                prefs["mute"] = updates["mute"]
+            if "reducedMotionMode" in updates:
+                if updates["reducedMotionMode"] not in VALID_MOTION_MODES:
+                    raise ValueError("reducedMotionMode is invalid.")
+                prefs["reducedMotionMode"] = updates["reducedMotionMode"]
+            if "animationQuality" in updates:
+                if updates["animationQuality"] not in VALID_QUALITIES:
+                    raise ValueError("animationQuality is invalid.")
+                prefs["animationQuality"] = updates["animationQuality"]
+            self._write(state)
+            return deepcopy(prefs)
 
     def _advance_demo_tasks(self, state: dict[str, Any]) -> bool:
         changed = False
@@ -286,3 +395,24 @@ class CovenStore:
                     "timestamp": now,
                 }
             )
+
+    def _namespace_name(self, namespace: str) -> str:
+        if namespace not in {"demo", "live"}:
+            raise ValueError("Namespace must be demo or live.")
+        return namespace
+
+    def _profile_id(self, value: str) -> str:
+        try:
+            profile_id = validate_identifier(value, field="profile id")
+        except ConfigError as exc:
+            raise ValueError(str(exc)) from exc
+        if profile_id not in self.profile_ids:
+            raise ValueError(f"Unknown profile: {profile_id}")
+        return profile_id
+
+    def _bounded_text(self, value: Any, field: str, *, max_length: int) -> str:
+        if not isinstance(value, str):
+            raise ValueError(f"{field} must be a string.")
+        if len(value) > max_length:
+            raise ValueError(f"{field} must be {max_length} characters or fewer.")
+        return value

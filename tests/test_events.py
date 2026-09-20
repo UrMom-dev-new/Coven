@@ -10,6 +10,7 @@ class EventTests(unittest.TestCase):
             "taskId": "task-1",
             "attemptId": "attempt-1",
             "status": "failed",
+            "outcomeKind": "terminal_failure",
             "terminal": True,
             "retryPolicyExhausted": True,
         }
@@ -30,6 +31,29 @@ class EventTests(unittest.TestCase):
 
         event = normalize_runtime_event(raw)
         self.assertEqual(event.outcome_kind, "tool_error")
+        self.assertFalse(should_trigger_failure_cinematic(raw, set()))
+
+    def test_string_false_does_not_count_as_boolean_true(self):
+        raw = {
+            "id": "event-4",
+            "taskId": "task-4",
+            "status": "failed",
+            "outcomeKind": "terminal_failure",
+            "terminal": "false",
+            "retryPolicyExhausted": "true",
+        }
+
+        self.assertFalse(should_trigger_failure_cinematic(raw, set()))
+
+    def test_unknown_failed_event_does_not_trigger(self):
+        raw = {
+            "id": "event-5",
+            "taskId": "task-5",
+            "status": "failed",
+            "terminal": True,
+            "retryPolicyExhausted": True,
+        }
+
         self.assertFalse(should_trigger_failure_cinematic(raw, set()))
 
     def test_cancelled_task_does_not_trigger_even_if_failed_status(self):

@@ -1,15 +1,32 @@
+import { api, postJson } from "./api.js";
+import { $, clear, field, node, restoreFocus } from "./dom.js";
+import { createSanctuaryGame } from "./game.js";
+import { sceneDurationForMotion } from "./presentation.js";
+
 const state = {
   profiles: [],
   selectedWitch: "morgana",
   selectedTask: null,
   tasks: [],
   status: null,
+  settings: {
+    cinematicsEnabled: true,
+    reducedMotionMode: "tableau",
+    mute: false,
+    animationQuality: "balanced",
+  },
   conversations: {},
   failureQueue: [],
   currentFailure: null,
+  cinematicTimer: null,
   skipAllFailures: false,
   recording: null,
   compact: false,
+  taskFilter: "all",
+  game: null,
+  refreshTimer: null,
+  refreshInFlight: false,
+  refreshBackoffMs: 1500,
 };
 
 const positions = {
@@ -21,25 +38,8 @@ const positions = {
   ophelia: { left: "82%", top: "54%" },
 };
 
-const $ = (id) => document.getElementById(id);
-
 function profile(id = state.selectedWitch) {
   return state.profiles.find((item) => item.id === id) || state.profiles[0];
-}
-
-async function api(path, options = {}) {
-  const headers = options.headers || {};
-  if (options.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
-  if (options.method && options.method !== "GET") headers["X-Coven-Intent"] = "ui-action";
-  const response = await fetch(path, { ...options, headers });
-  const payload = await response.json();
-  if (!response.ok) {
-    const error = new Error(payload.error || "Request failed");
-    error.payload = payload;
-    error.status = response.status;
-    throw error;
-  }
-  return payload;
 }
 
 function setNotice(message, tone = "info") {
@@ -48,19 +48,83 @@ function setNotice(message, tone = "info") {
   notice.dataset.tone = tone;
 }
 
-async function refreshStatus() {
-  state.status = await api("/api/status");
+function renderOnboarding() {
+  const host = $("onboardingChecks");
+  if (!host || !state.status) return;
+  clear(host);
+  const items = [
+    ["Mode", state.status.demoMode ? "Demo tutorial state is isolated." : "Live namespace selected."],
+    ["Hermes", state.status.hermes?.operational ? "CLI operational." : "Not operational yet."],
+    ["Hermes API", state.status.hermesApi?.configured ? "API transport configured." : "API transport not configured."],
+    ["Ollama", state.status.ollama?.operational ? "Local service reachable." : "Local service unavailable."],
+    ["OpenAI", state.status.openai?.configured ? "API key environment variable found." : "API key not configured."],
+    ["Hardware", `${state.status.hardware?.system || "unknown"} ${state.status.hardware?.machine || ""}, ${state.status.hardware?.memory || "memory unknown"}`],
+    ["Workspace", "Workspace selection is pending the full desktop onboarding flow."],
+    ["Voice", "Text-first path active; voice setup is a later gate."],
+  ];
+  for (const [title, text] of items) {
+    host.append(node("div", { className: "check-item" }, [node("b", { text: title }), node("span", { text })]));
+  }
+}
+
+function captureUiPosition() {
+  return {
+    activeId: document.activeElement?.id || "",
+    transcript: $("transcript")?.scrollTop || 0,
+    taskList: $("taskList")?.scrollTop || 0,
+    taskDetail: $("taskDetail")?.scrollTop || 0,
+  };
+}
+
+function restoreUiPosition(position) {
+  if (!position) return;
+  if ($("transcript")) $("transcript").scrollTop = position.transcript;
+  if ($("taskList")) $("taskList").scrollTop = position.taskList;
+  if ($("taskDetail")) $("taskDetail").scrollTop = position.taskDetail;
+  restoreFocus(position.activeId);
+}
+
+function isTypingSensitive() {
+  const active = document.activeElement;
+  return active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement;
+}
+
+async function refreshStatus(force = false) {
+  state.status = force ? await postJson("/api/status/refresh", {}) : await api("/api/status");
   $("connectionState").textContent = state.status.connection;
   $("runtimeRoute").textContent = state.status.routing.taskRuntime;
   $("providerRoute").textContent = `${state.status.routing.localModel} / ${state.status.routing.apiModel}`;
   $("taskingState").textContent = state.status.demoMode ? "Explicit demo mode" : "Live Hermes required";
   if (!state.status.demoMode && state.status.connection === "disconnected") {
-    setNotice("Hermes is not available on PATH. Live task dispatch is disabled. Start with COVEN_DEMO_MODE=1 only for fixture testing.", "warn");
+    setNotice("Hermes is not operational for this app namespace. Live task dispatch is disabled until configured.", "warn");
   } else if (state.status.demoMode) {
-    setNotice("Demo mode is active. Fixture tasks are separate from Hermes and are labeled as demo data.", "warn");
+    setNotice("Demo mode is active. Fixture tasks are isolated from the future live Hermes namespace.", "warn");
   } else {
-    setNotice("Hermes was detected. Live dispatch still requires completing the adapter contract.", "info");
+    setNotice("Hermes was detected. Live dispatch remains an adapter gate in this foundation build.", "info");
   }
+  renderOnboarding();
+}
+
+async function refreshSettings() {
+  const payload = await api("/api/settings");
+  state.settings = payload.settings;
+  applySettings();
+}
+
+function applySettings() {
+  $("toggleMute").checked = Boolean(state.settings.mute);
+  $("toggleCinematics").checked = Boolean(state.settings.cinematicsEnabled);
+  $("motionMode").value = state.settings.reducedMotionMode;
+  $("qualityMode").value = state.settings.animationQuality;
+  document.body.classList.toggle("quality-low", state.settings.animationQuality === "low");
+  document.body.classList.toggle("muted", Boolean(state.settings.mute));
+  state.game?.setQuality(state.settings.animationQuality);
+}
+
+async function updateSettings(updates) {
+  const payload = await postJson("/api/settings", updates);
+  state.settings = payload.settings;
+  applySettings();
 }
 
 async function refreshProfiles() {
@@ -68,27 +132,32 @@ async function refreshProfiles() {
   state.profiles = payload.witches;
   renderRoster();
   renderHotspots();
-  selectWitch(state.selectedWitch);
+  selectWitch(state.selectedWitch, { fetchConversation: false });
 }
 
 async function refreshTasks() {
   const payload = await api("/api/tasks");
   state.tasks = payload.tasks;
+  state.game?.setTasks(state.tasks);
   renderTasks();
 }
 
 async function refreshConversation(witchId = state.selectedWitch) {
   const payload = await api(`/api/conversations/${encodeURIComponent(witchId)}`);
   state.conversations[witchId] = payload.messages;
-  renderTranscript();
+  if (witchId === state.selectedWitch) renderTranscript();
 }
 
 async function refreshFailures() {
   const payload = await api("/api/failure-events");
   for (const event of payload.events) {
-    if (!state.failureQueue.some((item) => item.eventId === event.eventId) && state.currentFailure?.eventId !== event.eventId) {
-      state.failureQueue.push(event);
+    if (!state.settings.cinematicsEnabled || state.skipAllFailures) {
+      await markCinematic(event.eventId, "skipped");
+      continue;
     }
+    const alreadyQueued = state.failureQueue.some((item) => item.eventId === event.eventId);
+    const current = state.currentFailure?.eventId === event.eventId;
+    if (!alreadyQueued && !current) state.failureQueue.push(event);
   }
   maybePlayFailure();
 }
@@ -103,40 +172,46 @@ function runtimeStateFor(witchId) {
 
 function renderRoster() {
   const roster = $("roster");
-  roster.innerHTML = "";
+  clear(roster);
   state.profiles.forEach((witch) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "roster-button";
-    button.dataset.selected = String(witch.id === state.selectedWitch);
-    button.innerHTML = `<span>${witch.name}</span><small>${witch.title}</small><b>${runtimeStateFor(witch.id)}</b>`;
+    const button = node("button", {
+      className: "roster-button",
+      type: "button",
+      dataset: { selected: witch.id === state.selectedWitch },
+    }, [
+      node("span", { text: witch.name }),
+      node("small", { text: witch.title }),
+      node("b", { text: runtimeStateFor(witch.id) }),
+    ]);
     button.addEventListener("click", () => selectWitch(witch.id));
-    roster.appendChild(button);
+    roster.append(button);
   });
 }
 
 function renderHotspots() {
   const host = $("hotspots");
-  host.innerHTML = "";
+  clear(host);
   state.profiles.forEach((witch) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "hotspot";
-    button.style.left = positions[witch.id].left;
-    button.style.top = positions[witch.id].top;
-    button.title = `${witch.name}: ${witch.station}`;
-    button.ariaLabel = `${witch.name}, ${witch.station}`;
-    button.dataset.selected = String(witch.id === state.selectedWitch);
+    const position = positions[witch.id] || { left: "50%", top: "50%" };
+    const button = node("button", {
+      className: "hotspot",
+      type: "button",
+      title: `${witch.name}: ${witch.station}`,
+      ariaLabel: `${witch.name}, ${witch.station}`,
+      dataset: { selected: witch.id === state.selectedWitch },
+      text: witch.name[0] || "?",
+    });
+    button.style.left = position.left;
+    button.style.top = position.top;
     button.addEventListener("click", () => selectWitch(witch.id));
-    button.textContent = witch.name[0];
-    host.appendChild(button);
+    host.append(button);
   });
 }
 
-function selectWitch(id) {
-  state.selectedWitch = id;
+function selectWitch(id, options = { fetchConversation: true }) {
   const witch = profile(id);
   if (!witch) return;
+  state.selectedWitch = id;
   $("selectedWitchName").textContent = witch.name;
   $("dialogueTitle").textContent = witch.name;
   $("witchTitle").textContent = witch.title;
@@ -145,61 +220,66 @@ function selectWitch(id) {
   $("portrait").src = witch.asset;
   $("portrait").alt = `${witch.name} portrait`;
   document.documentElement.style.setProperty("--witch-accent", witch.accent);
+  state.game?.setSelected(witch.id);
   renderRoster();
   renderHotspots();
-  refreshConversation(id).catch((error) => setNotice(error.message, "error"));
+  if (options.fetchConversation) refreshConversation(id).catch((error) => setNotice(error.message, "error"));
+  else renderTranscript();
 }
 
 function renderTranscript() {
   const list = $("transcript");
+  clear(list);
   const messages = state.conversations[state.selectedWitch] || [];
-  list.innerHTML = "";
   if (!messages.length) {
-    const empty = document.createElement("li");
-    empty.className = "empty-state";
-    empty.textContent = "No messages yet. Conversation is durable local text; task assignment remains separate.";
-    list.appendChild(empty);
+    list.append(node("li", {
+      className: "empty-state",
+      text: "No messages yet. Conversation is durable local text; task assignment remains separate.",
+    }));
     return;
   }
   for (const message of messages) {
-    const item = document.createElement("li");
-    item.className = message.author === "user" ? "message user" : "message witch";
     const author = message.author === "user" ? "You" : profile(message.author)?.name || message.author;
-    item.innerHTML = `<b>${author}</b><p></p><time>${new Date(message.timestamp).toLocaleString()}</time>`;
-    item.querySelector("p").textContent = message.text;
-    list.appendChild(item);
+    list.append(node("li", { className: message.author === "user" ? "message user" : "message witch" }, [
+      node("b", { text: author }),
+      node("p", { text: message.text }),
+      node("time", { text: new Date(message.timestamp).toLocaleString() }),
+    ]));
   }
   list.scrollTop = list.scrollHeight;
 }
 
 function statusLabel(status) {
-  return status.replace(/_/g, " ");
+  return String(status || "unknown").replace(/_/g, " ");
 }
 
 function renderTasks() {
   $("taskCount").textContent = String(state.tasks.length);
   const list = $("taskList");
-  list.innerHTML = "";
-  if (!state.tasks.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-state";
-    empty.textContent = "No tasks recorded yet.";
-    list.appendChild(empty);
+  const previousScroll = list.scrollTop;
+  clear(list);
+  const visibleTasks = state.tasks.filter((task) => taskMatchesFilter(task, state.taskFilter));
+  if (!visibleTasks.length) {
+    list.append(node("p", { className: "empty-state", text: "No tasks recorded yet." }));
   }
-  state.tasks.forEach((task) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "task-row";
-    button.dataset.status = task.status;
-    button.dataset.selected = String(task.id === state.selectedTask);
-    button.innerHTML = `<span>${task.title}</span><small>${profile(task.assignee)?.name || task.assignee} - ${statusLabel(task.status)}</small><b>${task.priority}</b>`;
+  visibleTasks.forEach((task) => {
+    const button = node("button", {
+      className: "task-row",
+      type: "button",
+      dataset: { status: task.status, selected: task.id === state.selectedTask },
+    }, [
+      node("span", { text: task.title }),
+      node("small", { text: `${profile(task.assignee)?.name || task.assignee} - ${statusLabel(task.status)}` }),
+      node("b", { text: task.priority }),
+    ]);
     button.addEventListener("click", () => {
       state.selectedTask = task.id;
       renderTasks();
       renderTaskDetail(task);
     });
-    list.appendChild(button);
+    list.append(button);
   });
+  list.scrollTop = previousScroll;
   renderRoster();
   if (state.selectedTask) {
     const selected = state.tasks.find((task) => task.id === state.selectedTask);
@@ -207,57 +287,75 @@ function renderTasks() {
   }
 }
 
-function renderTaskDetail(task) {
-  const detail = $("taskDetail");
-  const timeline = task.timeline.map((item) => `<li><b>${item.kind}</b><span>${item.message}</span><time>${new Date(item.timestamp).toLocaleString()}</time></li>`).join("");
-  const evidence = task.evidence.length ? task.evidence.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : "<li>No evidence recorded yet.</li>";
-  const blockers = task.blockers.length ? task.blockers.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : "<li>No blockers.</li>";
-  detail.innerHTML = `
-    <h3>${escapeHtml(task.title)}</h3>
-    <dl>
-      <div><dt>Assignee</dt><dd>${escapeHtml(profile(task.assignee)?.name || task.assignee)}</dd></div>
-      <div><dt>State</dt><dd>${escapeHtml(statusLabel(task.status))}</dd></div>
-      <div><dt>Mode</dt><dd>${escapeHtml(task.mode)}</dd></div>
-      <div><dt>Latest update</dt><dd>${escapeHtml(task.latestUpdate)}</dd></div>
-    </dl>
-    <h4>Instructions</h4>
-    <p>${escapeHtml(task.instructions || "No additional instructions.")}</p>
-    <h4>Blockers</h4>
-    <ul>${blockers}</ul>
-    <h4>Evidence</h4>
-    <ul>${evidence}</ul>
-    <h4>Timeline</h4>
-    <ol>${timeline}</ol>
-    ${task.result ? `<h4>Result</h4><p>${escapeHtml(task.result)}</p>` : ""}
-    ${task.status === "failed" ? `<button data-retry="${task.id}" type="button">Retry as new attempt</button>` : ""}
-  `;
-  const retry = detail.querySelector("[data-retry]");
-  if (retry) retry.addEventListener("click", () => retryTask(task.id));
+function taskMatchesFilter(task, filter) {
+  if (filter === "active") return ["queued", "running"].includes(task.status);
+  if (filter === "needs") return ["needs input", "needs_input", "awaiting authorization", "awaiting_authorization"].includes(task.status);
+  if (filter === "completed") return task.status === "completed";
+  if (filter === "failed") return task.status === "failed";
+  return true;
 }
 
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;",
-  })[char]);
+function renderTaskDetail(task) {
+  const detail = $("taskDetail");
+  const previousScroll = detail.scrollTop;
+  clear(detail);
+  detail.append(node("h3", { text: task.title }));
+  detail.append(node("dl", {}, [
+    field("Assignee", profile(task.assignee)?.name || task.assignee),
+    field("State", statusLabel(task.status)),
+    field("Mode", task.mode),
+    field("Latest update", task.latestUpdate),
+  ]));
+  appendSection(detail, "Instructions", node("p", { text: task.instructions || "No additional instructions." }));
+  appendSection(detail, "Blockers", listOf(task.blockers, "No blockers."));
+  appendSection(detail, "Evidence", listOf(task.evidence, "No evidence recorded yet."));
+  appendSection(detail, "Timeline", timelineOf(task.timeline));
+  if (task.result) appendSection(detail, "Result", node("p", { text: task.result }));
+  if (task.status === "failed") {
+    const retry = node("button", { type: "button", text: "Retry as new attempt" });
+    retry.addEventListener("click", () => retryTask(task.id));
+    detail.append(retry);
+  }
+  detail.scrollTop = previousScroll;
+}
+
+function appendSection(parent, title, content) {
+  parent.append(node("h4", { text: title }));
+  parent.append(content);
+}
+
+function listOf(items, emptyText) {
+  const list = node("ul");
+  const values = Array.isArray(items) && items.length ? items : [emptyText];
+  values.forEach((item) => list.append(node("li", { text: item })));
+  return list;
+}
+
+function timelineOf(items) {
+  const list = node("ol");
+  for (const item of items || []) {
+    list.append(node("li", {}, [
+      node("b", { text: item.kind }),
+      node("span", { text: item.message }),
+      node("time", { text: new Date(item.timestamp).toLocaleString() }),
+    ]));
+  }
+  return list;
 }
 
 async function sendMessage(event) {
   event.preventDefault();
+  const witchId = state.selectedWitch;
   const input = $("messageInput");
   const message = input.value.trim();
   if (!message) return;
   try {
-    const payload = await api(`/api/conversations/${encodeURIComponent(state.selectedWitch)}`, {
-      method: "POST",
-      body: JSON.stringify({ message }),
-    });
-    state.conversations[state.selectedWitch] = payload.messages;
-    input.value = "";
-    renderTranscript();
+    const payload = await postJson(`/api/conversations/${encodeURIComponent(witchId)}`, { message });
+    state.conversations[payload.witchId || witchId] = payload.messages;
+    if (state.selectedWitch === witchId) {
+      input.value = "";
+      renderTranscript();
+    }
   } catch (error) {
     setNotice(error.message, "error");
   }
@@ -265,15 +363,13 @@ async function sendMessage(event) {
 
 async function assignTask(event) {
   event.preventDefault();
+  const assignee = state.selectedWitch;
   try {
-    const payload = await api("/api/tasks", {
-      method: "POST",
-      body: JSON.stringify({
-        assignee: state.selectedWitch,
-        title: $("taskTitle").value,
-        instructions: $("taskInstructions").value,
-        priority: $("taskPriority").value,
-      }),
+    const payload = await postJson("/api/tasks", {
+      assignee,
+      title: $("taskTitle").value,
+      instructions: $("taskInstructions").value,
+      priority: $("taskPriority").value,
     });
     state.tasks.unshift(payload.task);
     state.selectedTask = payload.task.id;
@@ -288,10 +384,7 @@ async function assignTask(event) {
 
 async function retryTask(taskId) {
   try {
-    const payload = await api(`/api/tasks/${encodeURIComponent(taskId)}/retry`, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
+    const payload = await postJson(`/api/tasks/${encodeURIComponent(taskId)}/retry`, {});
     state.tasks.unshift(payload.task);
     state.selectedTask = payload.task.id;
     renderTasks();
@@ -302,36 +395,15 @@ async function retryTask(taskId) {
   }
 }
 
-async function maybeRecordVoice() {
-  if (state.recording) {
-    state.recording.stop();
-    return;
-  }
-  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
-    setNotice("This browser does not expose local recording APIs. Text input remains available.", "warn");
-    return;
-  }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const chunks = [];
-    const recorder = new MediaRecorder(stream);
-    const startedAt = Date.now();
-    recorder.addEventListener("dataavailable", (event) => chunks.push(event.data));
-    recorder.addEventListener("stop", () => {
-      stream.getTracks().forEach((track) => track.stop());
-      state.recording = null;
-      $("recordButton").textContent = "Push to talk";
-      $("voiceState").textContent = "Recording saved locally";
-      const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
-      $("messageInput").value = `Recorded ${seconds}s of audio. Local transcription is not configured yet; type or paste the transcript here before sending.`;
-    });
-    recorder.start();
-    state.recording = recorder;
-    $("recordButton").textContent = "Stop recording";
-    $("voiceState").textContent = "Recording";
-  } catch (error) {
-    setNotice(`Microphone unavailable: ${error.message}`, "error");
-  }
+function updateVoiceAvailability() {
+  $("recordButton").disabled = true;
+  $("recordButton").textContent = "Voice unavailable";
+  $("voiceState").textContent = "Voice is not implemented in this build";
+  $("stopSpeakingButton").disabled = !("speechSynthesis" in window);
+}
+
+function voiceUnavailable() {
+  setNotice("Voice capture is not wired to a transcriber yet. Text workflows are fully available.", "warn");
 }
 
 function stopSpeech() {
@@ -339,9 +411,16 @@ function stopSpeech() {
   $("voiceState").textContent = "Speech stopped";
 }
 
+function clearCinematicTimer() {
+  if (state.cinematicTimer) {
+    window.clearTimeout(state.cinematicTimer);
+    state.cinematicTimer = null;
+  }
+}
+
 function maybePlayFailure() {
-  if (state.currentFailure || state.skipAllFailures || !$("toggleCinematics").checked) return;
-  if (document.hidden || state.recording) return;
+  if (state.currentFailure || state.skipAllFailures || !state.settings.cinematicsEnabled) return;
+  if (document.hidden || state.recording || isTypingSensitive()) return;
   const event = state.failureQueue.shift();
   if (!event) return;
   state.currentFailure = event;
@@ -349,10 +428,11 @@ function maybePlayFailure() {
 }
 
 function openFailureOverlay(event) {
+  clearCinematicTimer();
   const overlay = $("failureOverlay");
   const scene = $("riverScene");
   const report = $("failureReport");
-  const mode = $("motionMode").value;
+  const mode = state.settings.reducedMotionMode;
   overlay.hidden = false;
   report.hidden = true;
   scene.hidden = false;
@@ -363,35 +443,43 @@ function openFailureOverlay(event) {
   $("failedStep").textContent = event.lastSuccessfulStep || "No checkpoint supplied.";
 
   if (mode === "off") {
-    finishFailureScene("skipped");
+    finishFailureScene("skipped", event.eventId);
     return;
   }
   if (mode === "tableau" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     scene.classList.add("tableau");
-    window.setTimeout(() => finishFailureScene("shown"), 1400);
+    state.cinematicTimer = window.setTimeout(() => finishFailureScene("shown", event.eventId), sceneDurationForMotion(mode, true));
     return;
   }
   scene.classList.add("playing");
-  window.setTimeout(() => finishFailureScene("shown"), 9800);
+  state.cinematicTimer = window.setTimeout(() => finishFailureScene("shown", event.eventId), sceneDurationForMotion(mode, false));
 }
 
-async function finishFailureScene(disposition) {
-  if (!state.currentFailure) return;
+async function markCinematic(eventId, disposition) {
+  return postJson("/api/cinematics", { eventId, disposition });
+}
+
+async function finishFailureScene(disposition, eventId = state.currentFailure?.eventId) {
+  if (!state.currentFailure || eventId !== state.currentFailure.eventId) return;
+  clearCinematicTimer();
   $("riverScene").hidden = true;
   $("failureReport").hidden = false;
   try {
-    await api("/api/cinematics", {
-      method: "POST",
-      body: JSON.stringify({ eventId: state.currentFailure.eventId, disposition }),
-    });
+    await markCinematic(eventId, disposition);
   } catch (error) {
     setNotice(error.message, "error");
   }
 }
 
 function closeFailureOverlay() {
+  clearCinematicTimer();
   $("failureOverlay").hidden = true;
+  const lastTask = state.currentFailure?.taskId;
   state.currentFailure = null;
+  if (lastTask) {
+    const selected = document.querySelector(`[data-status][data-selected="true"]`) || $("taskDetail");
+    selected?.focus?.({ preventScroll: true });
+  }
   maybePlayFailure();
 }
 
@@ -403,27 +491,41 @@ function inspectCurrentFailure() {
   closeFailureOverlay();
 }
 
+async function skipAllFailures() {
+  state.skipAllFailures = true;
+  const currentId = state.currentFailure?.eventId;
+  if (currentId) await finishFailureScene("skipped", currentId);
+  const queued = state.failureQueue.splice(0);
+  await Promise.allSettled(queued.map((event) => markCinematic(event.eventId, "skipped")));
+}
+
 function reassignCurrentFailure() {
   selectWitch("morgana");
   closeFailureOverlay();
-  setNotice("Morgana is selected. Reassignment is advisory in this starter until live Hermes dispatch is wired.", "info");
+  setNotice("Morgana is selected. Reassignment remains advisory until live Hermes dispatch is wired.", "info");
 }
 
 function bindEvents() {
   $("messageForm").addEventListener("submit", sendMessage);
   $("taskForm").addEventListener("submit", assignTask);
-  $("recordButton").addEventListener("click", maybeRecordVoice);
+  $("recordButton").addEventListener("click", voiceUnavailable);
   $("stopSpeakingButton").addEventListener("click", stopSpeech);
   $("compactToggle").addEventListener("click", () => {
     state.compact = !state.compact;
     $("workspace").classList.toggle("compact", state.compact);
     $("compactToggle").textContent = state.compact ? "Sanctuary view" : "Compact work view";
   });
-  $("skipSceneButton").addEventListener("click", () => finishFailureScene("skipped"));
-  $("skipAllButton").addEventListener("click", () => {
-    state.skipAllFailures = true;
-    finishFailureScene("skipped");
+  $("dismissOnboarding").addEventListener("click", () => $("workspace").querySelector(".onboarding-panel")?.classList.add("dismissed"));
+  $("taskFilter").addEventListener("change", (event) => {
+    state.taskFilter = event.target.value;
+    renderTasks();
   });
+  $("toggleMute").addEventListener("change", (event) => updateSettings({ mute: event.target.checked }).catch((error) => setNotice(error.message, "error")));
+  $("toggleCinematics").addEventListener("change", (event) => updateSettings({ cinematicsEnabled: event.target.checked }).catch((error) => setNotice(error.message, "error")));
+  $("motionMode").addEventListener("change", (event) => updateSettings({ reducedMotionMode: event.target.value }).catch((error) => setNotice(error.message, "error")));
+  $("qualityMode").addEventListener("change", (event) => updateSettings({ animationQuality: event.target.value }).catch((error) => setNotice(error.message, "error")));
+  $("skipSceneButton").addEventListener("click", () => finishFailureScene("skipped"));
+  $("skipAllButton").addEventListener("click", () => skipAllFailures().catch((error) => setNotice(error.message, "error")));
   $("inspectFailureButton").addEventListener("click", inspectCurrentFailure);
   $("retryFailureButton").addEventListener("click", () => state.currentFailure && retryTask(state.currentFailure.taskId));
   $("reassignFailureButton").addEventListener("click", reassignCurrentFailure);
@@ -433,27 +535,58 @@ function bindEvents() {
       finishFailureScene("skipped");
     }
   });
-  document.addEventListener("visibilitychange", maybePlayFailure);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) clearCinematicTimer();
+    scheduleRefresh(document.hidden ? 10000 : 0);
+    if (!document.hidden) maybePlayFailure();
+  });
 }
 
-async function tick() {
+async function refreshAll({ forceRuntime = false } = {}) {
+  if (state.refreshInFlight) return;
+  state.refreshInFlight = true;
+  const position = captureUiPosition();
   try {
-    await refreshStatus();
+    await refreshStatus(forceRuntime);
+    await refreshSettings();
     await refreshTasks();
     await refreshFailures();
+    state.refreshBackoffMs = 1500;
   } catch (error) {
     setNotice(error.message, "error");
+    state.refreshBackoffMs = Math.min(state.refreshBackoffMs * 1.6, 12000);
+  } finally {
+    state.refreshInFlight = false;
+    restoreUiPosition(position);
+    scheduleRefresh();
   }
+}
+
+function scheduleRefresh(delay) {
+  if (state.refreshTimer) window.clearTimeout(state.refreshTimer);
+  const nextDelay = delay ?? (document.hidden ? 10000 : state.refreshBackoffMs);
+  state.refreshTimer = window.setTimeout(() => refreshAll(), nextDelay);
 }
 
 async function init() {
   bindEvents();
+  updateVoiceAvailability();
+  const prompt = $("interactionPrompt");
+  state.game = createSanctuaryGame($("sanctuaryCanvas"), {
+    onPrompt(message) {
+      if (!prompt) return;
+      prompt.hidden = !message;
+      prompt.textContent = message;
+    },
+  });
+  $("sanctuaryCanvas").addEventListener("coven-select-witch", (event) => selectWitch(event.detail.id));
   await refreshStatus();
+  await refreshSettings();
   await refreshProfiles();
   await refreshConversation();
   await refreshTasks();
   await refreshFailures();
-  window.setInterval(tick, 1500);
+  scheduleRefresh();
 }
 
 init().catch((error) => setNotice(error.message, "error"));

@@ -53,6 +53,17 @@
       </header>
 
       <main class="workspace" id="workspace">
+        <section class="onboarding-panel" aria-labelledby="onboardingTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">First run</p>
+              <h2 id="onboardingTitle">Onboarding</h2>
+            </div>
+            <button id="dismissOnboarding" class="ghost-button" type="button">Hide</button>
+          </div>
+          <div id="onboardingChecks" class="check-grid"></div>
+        </section>
+
         <section class="sanctuary-panel" aria-labelledby="sanctuaryTitle">
           <div class="panel-heading">
             <div>
@@ -63,7 +74,9 @@
           </div>
           <div class="sanctuary-stage">
             <img src="/assets/sanctuary.svg" alt="Gothic coven room with six witch workstations" />
+            <canvas id="sanctuaryCanvas" width="1400" height="720" aria-label="Playable sanctuary map"></canvas>
             <div id="hotspots" class="hotspots" aria-label="Witch stations"></div>
+            <div id="interactionPrompt" class="interaction-prompt" hidden></div>
           </div>
           <nav id="roster" class="roster" aria-label="Witch roster"></nav>
           <div id="systemNotice" class="system-notice" role="status"></div>
@@ -125,6 +138,14 @@
             </div>
             <span id="taskCount" class="counter">0</span>
           </div>
+          <label for="taskFilter">Filter</label>
+          <select id="taskFilter">
+            <option value="all">All tasks</option>
+            <option value="active">Active</option>
+            <option value="needs">Needs input / approval</option>
+            <option value="completed">Completed</option>
+            <option value="failed">Failed</option>
+          </select>
           <div id="taskList" class="task-list" aria-label="Task list"></div>
           <article id="taskDetail" class="task-detail" aria-live="polite">
             <p>Select a task to inspect its timeline, blockers, evidence, and recovery actions.</p>

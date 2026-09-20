@@ -1,2 +1,7 @@
-# Coven Agent Workspace has no third-party Python runtime dependencies.
+# Browser-development server dependencies:
 # Python 3.11+ standard library is sufficient for the local server and tests.
+
+# Windows desktop packaging dependencies, pinned for beta build scripts.
+# These are not required to run the browser-development server.
+pywebview==5.4
+pyinstaller==6.22.3

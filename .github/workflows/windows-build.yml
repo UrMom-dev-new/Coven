@@ -1,0 +1,31 @@
+name: Windows build
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-portable:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Run tests
+        run: python -m unittest discover -s tests
+      - name: Build portable bundle
+        shell: pwsh
+        run: .\scripts\build-windows.ps1 -Clean
+      - name: Smoke executable help
+        shell: pwsh
+        run: |
+          if (!(Test-Path .\dist\Coven\Coven.exe)) { throw "Coven.exe missing" }
+          Get-ChildItem .\dist\Coven
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Coven-Windows-Portable
+          path: dist/Coven

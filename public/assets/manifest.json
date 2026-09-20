@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "license": "Original project artwork, bundled for HermesAvatar/Coven.",
+  "assets": [
+    {
+      "id": "sanctuary-background",
+      "path": "/assets/sanctuary.svg",
+      "kind": "layered-svg",
+      "dimensions": [1400, 720],
+      "origin": "Created in-repo with vector primitives.",
+      "anchors": { "world": [0, 0] }
+    },
+    {
+      "id": "ophelia-river-tableau",
+      "path": "/assets/river-tableau.svg",
+      "kind": "cinematic-svg",
+      "dimensions": [1280, 720],
+      "origin": "Created in-repo with vector primitives.",
+      "anchors": { "focus": [640, 500] },
+      "timing": { "tableauMs": 1400, "fullMs": 9800 }
+    },
+    {
+      "id": "witch-portraits",
+      "path": "/assets/witches/*.svg",
+      "kind": "portrait-set",
+      "dimensions": [360, 480],
+      "origin": "Created in-repo with vector primitives.",
+      "states": ["idle", "selected", "working", "awaiting_input", "success", "terminal_failure_recovery"]
+    },
+    {
+      "id": "canvas-familiar",
+      "path": "generated-by-public/src/game.js",
+      "kind": "canvas-primitive",
+      "dimensions": [32, 58],
+      "origin": "Drawn at runtime with Canvas 2D.",
+      "collisionFootprint": [32, 32]
+    }
+  ]
+}

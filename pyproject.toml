@@ -5,8 +5,15 @@ description = "Local gothic adventure-game workspace shell for Hermes Agent."
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+desktop = [
+  "pywebview==5.4",
+  "pyinstaller==6.22.3",
+]
+
 [project.scripts]
 coven-workspace = "coven.server:main"
+coven-desktop = "coven.desktop:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
