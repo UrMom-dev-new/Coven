@@ -3,7 +3,7 @@
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules
 
-ROOT = Path(SPECPATH).parent.parent
+ROOT = Path(SPECPATH).resolve().parent
 
 hiddenimports = ["clr"] + collect_submodules("webview.platforms")
 

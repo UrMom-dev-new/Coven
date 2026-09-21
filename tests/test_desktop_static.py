@@ -38,7 +38,7 @@ class DesktopStaticTests(unittest.TestCase):
     def test_pyinstaller_spec_collects_webview_backend_modules(self):
         spec = (ROOT / "packaging" / "Coven.spec").read_text(encoding="utf-8")
 
-        self.assertIn("ROOT = Path(SPECPATH).parent.parent", spec)
+        self.assertIn("ROOT = Path(SPECPATH).resolve().parent", spec)
         self.assertIn("collect_submodules(\"webview.platforms\")", spec)
         self.assertIn("hiddenimports=hiddenimports", spec)
 
