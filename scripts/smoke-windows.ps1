@@ -28,6 +28,8 @@ function Show-SelfTestLog {
 }
 
 Write-Host "Running Coven.exe self-test with a $TimeoutSeconds second timeout..."
+$PreviousSelfTestLog = $env:COVEN_SELF_TEST_LOG
+$env:COVEN_SELF_TEST_LOG = $SelfTestLog
 $Smoke = Start-Process -FilePath $Exe -ArgumentList @(
   "--self-test",
   "--auth-token",
@@ -37,6 +39,11 @@ $Smoke = Start-Process -FilePath $Exe -ArgumentList @(
   "--self-test-log",
   $SelfTestLog
 ) -PassThru
+if ($null -eq $PreviousSelfTestLog) {
+  Remove-Item Env:\COVEN_SELF_TEST_LOG -ErrorAction SilentlyContinue
+} else {
+  $env:COVEN_SELF_TEST_LOG = $PreviousSelfTestLog
+}
 
 $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 while (-not $Smoke.HasExited -and (Get-Date) -lt $Deadline) {

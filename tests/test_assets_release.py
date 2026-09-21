@@ -24,6 +24,7 @@ class AssetReleaseTests(unittest.TestCase):
         for path in [
             "coven/desktop.py",
             "packaging/Coven.spec",
+            "packaging/pyinstaller_runtime_hook.py",
             "packaging/installer/Coven.iss",
             "scripts/build-windows.ps1",
             "scripts/smoke-windows.ps1",
@@ -54,6 +55,7 @@ class AssetReleaseTests(unittest.TestCase):
         self.assertIn("TimeoutSeconds", smoke_script)
         self.assertIn("Stop-Process", smoke_script)
         self.assertIn("--self-test-log", smoke_script)
+        self.assertIn("COVEN_SELF_TEST_LOG", smoke_script)
         self.assertIn("Show-SelfTestLog", smoke_script)
 
 

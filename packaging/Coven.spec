@@ -22,7 +22,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=[str(ROOT / "packaging" / "pyinstaller_runtime_hook.py")],
     excludes=["PyQt5", "PyQt6", "PySide2", "PySide6", "gi", "cefpython3"],
     noarchive=False,
 )
@@ -39,6 +39,7 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
+    disable_windowed_traceback=True,
     version=str(ROOT / "packaging" / "version_info.txt"),
 )
 coll = COLLECT(

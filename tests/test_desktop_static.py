@@ -44,6 +44,8 @@ class DesktopStaticTests(unittest.TestCase):
         spec = (ROOT / "packaging" / "Coven.spec").read_text(encoding="utf-8")
 
         self.assertIn("ROOT = Path(SPECPATH).resolve().parent", spec)
+        self.assertIn("pyinstaller_runtime_hook.py", spec)
+        self.assertIn("disable_windowed_traceback=True", spec)
         self.assertIn("collect_submodules(\"webview.platforms\")", spec)
         self.assertIn("hiddenimports=hiddenimports", spec)
 
