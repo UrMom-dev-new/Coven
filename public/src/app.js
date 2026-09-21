@@ -21,6 +21,9 @@ const state = {
   cinematicTimer: null,
   skipAllFailures: false,
   recording: null,
+  voiceDrafts: {},
+  messageDrafts: {},
+  lastSpokenMessageId: null,
   compact: false,
   taskFilter: "all",
   activeView: "sanctuary",
@@ -55,8 +58,8 @@ function renderOnboarding() {
   clear(host);
   const items = [
     ["Mode", state.status.demoMode ? "Demo tutorial state is isolated." : "Live namespace selected."],
-    ["Hermes", state.status.hermes?.operational ? "CLI operational." : "Not operational yet."],
-    ["Hermes API", state.status.hermesApi?.configured ? "API transport configured." : "API transport not configured."],
+    ["Hermes", state.status.hermes?.operational ? "CLI installed." : "CLI not operational yet."],
+    ["Hermes API", hermesApiSummary()],
     ["Ollama", state.status.ollama?.operational ? "Local service reachable." : "Local service unavailable."],
     ["OpenAI", state.status.openai?.configured ? "API key environment variable found." : "API key not configured."],
     ["Hardware", `${state.status.hardware?.system || "unknown"} ${state.status.hardware?.machine || ""}, ${state.status.hardware?.memory || "memory unknown"}`],
@@ -66,6 +69,15 @@ function renderOnboarding() {
   for (const [title, text] of items) {
     host.append(node("div", { className: "check-item" }, [node("b", { text: title }), node("span", { text })]));
   }
+}
+
+function hermesApiSummary() {
+  const apiState = state.status?.hermesApi;
+  if (!apiState?.configured) return "API transport not configured.";
+  if (!apiState.reachable) return "Endpoint not reachable.";
+  if (!apiState.authenticated) return "Bearer token not accepted.";
+  if (!apiState.taskCapable) return "Authenticated, but Runs API is not advertised.";
+  return apiState.runEventsCapable ? "Runs API ready with event stream support." : "Runs API ready; event stream unavailable.";
 }
 
 function captureUiPosition() {
@@ -98,14 +110,14 @@ async function refreshStatus(force = false) {
   $("demoBadge").hidden = !state.status.demoMode;
   $("runtimeRoute").textContent = state.status.routing.taskRuntime;
   $("providerRoute").textContent = `${state.status.routing.localModel} / ${state.status.routing.apiModel}`;
-  $("taskingState").textContent = state.status.demoMode ? "Explicit demo mode" : "Live Hermes required";
+  $("taskingState").textContent = state.status.demoMode ? "Explicit demo mode" : (state.status.hermesApi?.taskCapable ? "Hermes Runs API ready" : "Hermes Runs API unavailable");
   document.body.dataset.connection = state.status.connection;
-  if (!state.status.demoMode && state.status.connection === "disconnected") {
-    setNotice("Hermes is not operational for this app namespace. Live task dispatch is disabled until configured.", "warn");
+  if (!state.status.demoMode && !state.status.hermesApi?.taskCapable) {
+    setNotice("Hermes is not ready for live task dispatch. Check endpoint, bearer token, capabilities, and model setup.", "warn");
   } else if (state.status.demoMode) {
     setNotice("Demo mode is active. Fixture tasks are isolated from the future live Hermes namespace.", "warn");
   } else {
-    setNotice("Hermes was detected. Live dispatch remains an adapter gate in this foundation build.", "info");
+    setNotice("Hermes Runs API is available. Live tasks are submitted as recoverable remote runs.", "info");
   }
   renderOnboarding();
 }
@@ -171,7 +183,7 @@ async function refreshFailures() {
 }
 
 function runtimeStateFor(witchId) {
-  const active = state.tasks.filter((task) => task.assignee === witchId && ["queued", "running", "needs input", "awaiting authorization"].includes(task.status)).length;
+  const active = state.tasks.filter((task) => task.assignee === witchId && ["queued", "running", "needs input", "needs_input", "waiting_for_approval", "stopping", "unknown", "disconnected"].includes(task.status)).length;
   const failed = state.tasks.filter((task) => task.assignee === witchId && task.status === "failed").length;
   if (failed) return `${failed} failed`;
   if (active) return `${active} active`;
@@ -224,6 +236,7 @@ function renderHotspots() {
 function selectWitch(id, options = { fetchConversation: true }) {
   const witch = profile(id);
   if (!witch) return;
+  rememberMessageDraft(state.selectedWitch);
   state.selectedWitch = id;
   $("selectedWitchName").textContent = witch.name;
   $("dialogueTitle").textContent = witch.name;
@@ -236,8 +249,28 @@ function selectWitch(id, options = { fetchConversation: true }) {
   state.game?.setSelected(witch.id);
   renderRoster();
   renderHotspots();
+  restoreMessageDraft(id);
   if (options.fetchConversation) refreshConversation(id).catch((error) => setNotice(error.message, "error"));
   else renderTranscript();
+}
+
+function rememberMessageDraft(witchId) {
+  const input = $("messageInput");
+  if (!input || !witchId) return;
+  state.messageDrafts[witchId] = input.value;
+}
+
+function restoreMessageDraft(witchId) {
+  const input = $("messageInput");
+  if (!input) return;
+  const preservedVoice = state.voiceDrafts[witchId];
+  if (preservedVoice) {
+    const existing = state.messageDrafts[witchId] || "";
+    state.messageDrafts[witchId] = existing ? `${existing.trim()} ${preservedVoice}` : preservedVoice;
+    delete state.voiceDrafts[witchId];
+    setNotice(`Recovered a voice transcript for ${profile(witchId)?.name || witchId}. Review it before sending.`, "info");
+  }
+  input.value = state.messageDrafts[witchId] || "";
 }
 
 function renderTranscript() {
@@ -253,11 +286,17 @@ function renderTranscript() {
   }
   for (const message of messages) {
     const author = message.author === "user" ? "You" : profile(message.author)?.name || message.author;
-    list.append(node("li", { className: message.author === "user" ? "message user" : "message witch" }, [
+    const delivery = message.delivery?.state || "delivered";
+    const children = [
       node("b", { text: author }),
       node("p", { text: message.text }),
       node("time", { text: new Date(message.timestamp).toLocaleString() }),
-    ]));
+    ];
+    if (delivery !== "delivered") {
+      const detail = message.delivery?.error || message.delivery?.code || "";
+      children.push(node("small", { className: "delivery-state", text: `${statusLabel(delivery)}${detail ? `: ${detail}` : ""}` }));
+    }
+    list.append(node("li", { className: message.author === "user" ? "message user" : "message witch" }, children));
   }
   list.scrollTop = list.scrollHeight;
 }
@@ -313,8 +352,8 @@ function renderTasks() {
 }
 
 function taskMatchesFilter(task, filter) {
-  if (filter === "active") return ["queued", "running", "needs input", "needs_input", "awaiting authorization", "awaiting_authorization", "failed"].includes(task.status);
-  if (filter === "needs") return ["needs input", "needs_input", "awaiting authorization", "awaiting_authorization"].includes(task.status);
+  if (filter === "active") return ["queued", "running", "needs input", "needs_input", "waiting_for_approval", "stopping", "unknown", "disconnected", "failed"].includes(task.status);
+  if (filter === "needs") return ["needs input", "needs_input", "waiting_for_approval"].includes(task.status);
   if (filter === "completed") return task.status === "completed";
   if (filter === "failed") return task.status === "failed";
   return true;
@@ -334,20 +373,50 @@ function renderTaskDetail(task) {
   detail.append(node("dl", {}, [
     field("Assignee", profile(task.assignee)?.name || task.assignee),
     field("State", statusLabel(task.status)),
+    field("Attempt", task.attemptId || "unknown"),
     field("Mode", task.mode),
+    field("Requested runtime", runtimeLabel(task.requestedRuntime)),
+    field("Served runtime", runtimeLabel(task.runtime)),
+    field("Hermes run", task.hermes?.runId || "unavailable"),
+    field("Usage", usageLabel(task.usage)),
     field("Latest update", task.latestUpdate),
   ]));
+  if (task.hermes?.idempotencyKey) appendSection(detail, "Recovery", node("p", { text: `Idempotency key retained for uncertain submission recovery: ${task.hermes.idempotencyKey}` }));
   appendSection(detail, "Instructions", node("p", { text: task.instructions || "No additional instructions." }));
   appendSection(detail, "Blockers", listOf(task.blockers, "No blockers."));
   appendSection(detail, "Evidence", listOf(task.evidence, "No evidence recorded yet."));
+  appendSection(detail, "Artifacts", artifactList(task.artifacts));
   appendSection(detail, "Timeline", timelineOf(task.timeline));
   if (task.result) appendSection(detail, "Result", node("p", { text: task.result }));
+  const actions = taskActions(task);
+  if (actions.length) {
+    detail.append(node("div", { className: "task-actions" }, actions));
+  }
+  detail.scrollTop = previousScroll;
+}
+
+function taskActions(task) {
+  const actions = [];
+  const active = ["queued", "running", "waiting_for_approval", "stopping", "unknown", "disconnected"].includes(task.status);
+  if (task.mode === "live" && active && task.hermes?.runId && task.status !== "stopping") {
+    const stop = node("button", { type: "button", text: "Request stop" });
+    stop.addEventListener("click", () => stopTask(task.id));
+    actions.push(stop);
+  }
+  const approvalState = task.approval?.state || "";
+  if (task.mode === "live" && (task.status === "waiting_for_approval" || approvalState === "pending")) {
+    const approve = node("button", { type: "button", text: "Approve once" });
+    approve.addEventListener("click", () => resolveApproval(task.id, "once"));
+    const deny = node("button", { type: "button", className: "secondary-button", text: "Deny" });
+    deny.addEventListener("click", () => resolveApproval(task.id, "deny"));
+    actions.push(approve, deny);
+  }
   if (task.status === "failed") {
     const retry = node("button", { type: "button", text: "Retry as new attempt" });
     retry.addEventListener("click", () => retryTask(task.id));
-    detail.append(retry);
+    actions.push(retry);
   }
-  detail.scrollTop = previousScroll;
+  return actions;
 }
 
 function appendSection(parent, title, content) {
@@ -360,6 +429,48 @@ function listOf(items, emptyText) {
   const values = Array.isArray(items) && items.length ? items : [emptyText];
   values.forEach((item) => list.append(node("li", { text: item })));
   return list;
+}
+
+function artifactList(items) {
+  const list = node("ul");
+  const values = Array.isArray(items) && items.length ? items : [];
+  if (!values.length) {
+    list.append(node("li", { text: "No verified artifact references recorded yet." }));
+    return list;
+  }
+  values.forEach((item) => {
+    if (typeof item === "string") {
+      list.append(node("li", { text: item }));
+      return;
+    }
+    if (item && typeof item === "object") {
+      const path = item.path || item.uri || item.name || "artifact";
+      const verified = item.exists === true || item.verified === true ? "verified" : "unverified";
+      list.append(node("li", { text: `${path} (${verified})` }));
+      return;
+    }
+    list.append(node("li", { text: String(item) }));
+  });
+  return list;
+}
+
+function runtimeLabel(runtime) {
+  if (!runtime || typeof runtime !== "object") return "unknown";
+  const provider = runtime.provider || runtime.servedProvider || runtime.requestedProvider || "";
+  const model = runtime.model || runtime.servedModel || runtime.requestedModel || "";
+  const route = runtime.routeMode || runtime.route || "";
+  const reason = runtime.reason ? ` - ${runtime.reason}` : "";
+  const parts = [route, provider, model].filter(Boolean);
+  return `${parts.join(" / ") || "unknown"}${reason}`;
+}
+
+function usageLabel(usage) {
+  if (!usage || typeof usage !== "object") return "unavailable";
+  const parts = [];
+  for (const key of ["input_tokens", "output_tokens", "total_tokens", "cost_usd"]) {
+    if (usage[key] !== undefined && usage[key] !== null) parts.push(`${key}: ${usage[key]}`);
+  }
+  return parts.length ? parts.join(", ") : "unavailable";
 }
 
 function timelineOf(items) {
@@ -385,6 +496,7 @@ async function sendMessage(event) {
     state.conversations[payload.witchId || witchId] = payload.messages;
     if (state.selectedWitch === witchId) {
       input.value = "";
+      state.messageDrafts[witchId] = "";
       renderTranscript();
       speakLatestWitchMessage(payload.messages);
     }
@@ -402,11 +514,16 @@ async function assignTask(event) {
       title: $("taskTitle").value,
       instructions: $("taskInstructions").value,
       priority: $("taskPriority").value,
+      routeMode: $("routeMode").value,
+      provider: $("taskProvider").value,
+      model: $("taskModel").value,
     });
     state.tasks.unshift(payload.task);
     state.selectedTask = payload.task.id;
     $("taskTitle").value = "";
     $("taskInstructions").value = "";
+    $("taskProvider").value = "";
+    $("taskModel").value = "";
     renderTasks();
     setNotice("Task queued. The journal will update as runtime events arrive.", "info");
   } catch (error) {
@@ -427,11 +544,41 @@ async function retryTask(taskId) {
   }
 }
 
+async function stopTask(taskId) {
+  try {
+    const payload = await postJson(`/api/tasks/${encodeURIComponent(taskId)}/stop`, {});
+    replaceTask(payload.task);
+    renderTasks();
+    setNotice("Stop requested. Coven will keep reconciling the run until Hermes confirms the terminal state.", "info");
+  } catch (error) {
+    setNotice(error.message, "error");
+  }
+}
+
+async function resolveApproval(taskId, decision) {
+  try {
+    const payload = await postJson(`/api/tasks/${encodeURIComponent(taskId)}/approval`, { decision });
+    replaceTask(payload.task);
+    renderTasks();
+    setNotice(`Approval decision sent: ${decision}.`, "info");
+  } catch (error) {
+    setNotice(error.message, "error");
+  }
+}
+
+function replaceTask(task) {
+  if (!task) return;
+  const index = state.tasks.findIndex((item) => item.id === task.id);
+  if (index >= 0) state.tasks.splice(index, 1, task);
+  else state.tasks.unshift(task);
+  state.selectedTask = task.id;
+}
+
 function updateVoiceAvailability() {
   const Recognition = speechRecognitionConstructor();
   $("recordButton").disabled = !Recognition;
   $("recordButton").textContent = Recognition ? "Push to talk" : "Voice unavailable";
-  $("voiceState").textContent = Recognition ? "Voice ready" : "Voice unavailable in this WebView";
+  $("voiceState").textContent = Recognition ? "Browser voice exposed; review transcript before sending" : "Voice unavailable in this WebView";
   $("stopSpeakingButton").disabled = !("speechSynthesis" in window);
 }
 
@@ -441,7 +588,8 @@ function speechRecognitionConstructor() {
 
 function toggleRecording() {
   if (state.recording) {
-    state.recording.stop();
+    state.recording.cancelled = false;
+    state.recording.recognition.stop();
     return;
   }
   const Recognition = speechRecognitionConstructor();
@@ -454,34 +602,66 @@ function toggleRecording() {
   recognition.continuous = false;
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
-  state.recording = recognition;
+  const recording = {
+    recognition,
+    witchId: state.selectedWitch,
+    startedAt: Date.now(),
+    cancelled: false,
+    timer: null,
+  };
+  state.recording = recording;
   $("recordButton").textContent = "Listening...";
-  $("voiceState").textContent = "Listening";
+  $("voiceState").textContent = `Listening for ${profile(recording.witchId)?.name || recording.witchId}`;
   recognition.addEventListener("result", (event) => {
     const transcript = Array.from(event.results)
       .map((result) => result[0]?.transcript || "")
       .join(" ")
       .trim();
     if (transcript) {
-      const input = $("messageInput");
-      input.value = input.value ? `${input.value.trim()} ${transcript}` : transcript;
-      input.focus();
-      $("voiceState").textContent = "Transcript ready";
+      receiveVoiceTranscript(recording.witchId, transcript);
     }
   });
   recognition.addEventListener("error", (event) => {
     setNotice(`Voice recognition failed: ${event.error || "unknown error"}.`, "warn");
   });
   recognition.addEventListener("end", () => {
+    if (state.recording === recording) state.recording = null;
+    if (recording.timer) window.clearTimeout(recording.timer);
+    $("recordButton").textContent = "Push to talk";
+    if ($("voiceState").textContent.startsWith("Listening")) $("voiceState").textContent = "Browser voice exposed; review transcript before sending";
+  });
+  try {
+    recognition.start();
+    recording.timer = window.setTimeout(() => {
+      if (state.recording === recording) recognition.stop();
+    }, 60000);
+  } catch (error) {
     state.recording = null;
     $("recordButton").textContent = "Push to talk";
-    if ($("voiceState").textContent === "Listening") $("voiceState").textContent = "Voice ready";
-  });
-  recognition.start();
+    $("voiceState").textContent = "Voice start failed";
+    setNotice(`Voice recognition could not start: ${error.message || error}.`, "warn");
+  }
+}
+
+function receiveVoiceTranscript(witchId, transcript) {
+  const text = transcript.trim();
+  if (!text) return;
+  if (witchId === state.selectedWitch) {
+    const input = $("messageInput");
+    input.value = input.value ? `${input.value.trim()} ${text}` : text;
+    input.focus();
+    $("voiceState").textContent = "Transcript ready for review";
+    return;
+  }
+  state.voiceDrafts[witchId] = state.voiceDrafts[witchId] ? `${state.voiceDrafts[witchId]} ${text}` : text;
+  setNotice(`Voice transcript was preserved for ${profile(witchId)?.name || witchId}; switch back to review it.`, "warn");
 }
 
 function stopSpeech() {
-  if (state.recording) state.recording.stop();
+  if (state.recording) {
+    state.recording.cancelled = true;
+    state.recording.recognition.stop();
+  }
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   $("voiceState").textContent = "Speech stopped";
 }
@@ -490,10 +670,18 @@ function speakLatestWitchMessage(messages) {
   if (state.settings.mute || !("speechSynthesis" in window)) return;
   const latest = [...(messages || [])].reverse().find((message) => message.author !== "user");
   if (!latest?.text) return;
+  if (latest.id && state.lastSpokenMessageId === latest.id) return;
+  state.lastSpokenMessageId = latest.id || null;
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(latest.text);
   utterance.rate = 0.94;
   utterance.pitch = 0.92;
+  utterance.addEventListener("end", () => {
+    if ($("voiceState").textContent === "Speaking") $("voiceState").textContent = "Speech complete";
+  });
+  utterance.addEventListener("error", () => {
+    $("voiceState").textContent = "Speech unavailable";
+  });
   window.speechSynthesis.speak(utterance);
   $("voiceState").textContent = "Speaking";
 }
@@ -609,6 +797,7 @@ function setActiveView(view) {
 
 function bindEvents() {
   $("messageForm").addEventListener("submit", sendMessage);
+  $("messageInput").addEventListener("input", () => rememberMessageDraft(state.selectedWitch));
   $("taskForm").addEventListener("submit", assignTask);
   $("recordButton").addEventListener("click", toggleRecording);
   $("stopSpeakingButton").addEventListener("click", stopSpeech);

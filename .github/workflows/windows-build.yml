@@ -32,7 +32,17 @@ jobs:
         run: |
           .\scripts\smoke-windows.ps1 -Exe .\dist\Coven\Coven.exe -Token workflow-smoke-token -TimeoutSeconds 45
           Get-ChildItem .\dist\Coven
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+      - name: Build installer artifact
+        shell: pwsh
+        timeout-minutes: 8
+        run: .\scripts\build-installer.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: Coven-Windows-Portable
           path: dist/Coven
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Coven-Windows-Installer
+          path: dist/installer/CovenSetup-*.exe

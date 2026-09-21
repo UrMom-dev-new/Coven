@@ -8,6 +8,8 @@ import subprocess
 import threading
 import time
 from typing import Any
+from urllib import error as urllib_error, request as urllib_request
+import json
 
 from .adapters import hardware_report
 from .configuration import AppConfig
@@ -70,23 +72,21 @@ class RuntimeInspector:
         }
 
         demo_mode = self.config.demo_mode
-        hermes_ready = bool(hermes["installed"] and hermes["operational"])
+        hermes_api = self._probe_hermes_api()
+        hermes_ready = bool(hermes_api["taskCapable"])
         return {
             "mode": "demo" if demo_mode else "live",
             "demoMode": demo_mode,
             "connection": "demo" if demo_mode else ("ready" if hermes_ready else "disconnected"),
             "hermes": hermes,
-            "hermesApi": {
-                "configured": bool(self.config.runtime.hermes_api_base_url and os.environ.get(self.config.runtime.hermes_api_key_env)),
-                "baseUrl": self.config.runtime.hermes_api_base_url or "unconfigured",
-                "keyEnvironmentVariable": self.config.runtime.hermes_api_key_env,
-            },
+            "hermesApi": hermes_api,
             "ollama": ollama,
             "openai": openai,
             "routing": {
-                "taskRuntime": "demo-fixture" if demo_mode else "hermes-agent",
+                "taskRuntime": "demo-fixture" if demo_mode else ("hermes-runs" if hermes_ready else "unavailable"),
                 "localModel": self.config.providers.ollama_model or ("ollama" if ollama["installed"] else "unavailable"),
                 "apiModel": self.config.providers.openai_model or ("openai" if openai["configured"] else "unconfigured"),
+                "autoPolicy": "local for bounded Circe/Hecate when a local model is configured; otherwise configured API model; no silent escalation from explicit local",
             },
             "hardware": hardware_report(),
         }
@@ -135,3 +135,86 @@ class RuntimeInspector:
             "output": output[:1200],
             "error": "" if completed.returncode == 0 else output[:240] or f"exit {completed.returncode}",
         }
+
+    def _probe_hermes_api(self) -> dict[str, Any]:
+        base_url = self.config.runtime.hermes_api_base_url.rstrip("/")
+        key_env = self.config.runtime.hermes_api_key_env
+        api_key = os.environ.get(key_env, "")
+        probe: dict[str, Any] = {
+            "configured": bool(base_url and api_key),
+            "baseUrl": base_url or "unconfigured",
+            "keyEnvironmentVariable": key_env,
+            "reachable": False,
+            "authenticated": False,
+            "taskCapable": False,
+            "runEventsCapable": False,
+            "approvalCapable": False,
+            "stopCapable": False,
+            "modelOptionsAvailable": False,
+            "capabilities": {},
+            "readiness": {"status": "unavailable"},
+            "notes": [],
+        }
+        if not base_url:
+            probe["notes"].append("Hermes API base URL is not configured.")
+            return probe
+        if not api_key:
+            probe["notes"].append(f"Hermes API key environment variable {key_env} is not set.")
+            return probe
+
+        health = self._http_json(f"{base_url}/health", api_key, timeout=1.5)
+        probe["reachable"] = bool(health.get("ok"))
+        if health.get("error"):
+            probe["notes"].append(f"Health check failed: {health['error']}")
+
+        capabilities = self._http_json(f"{base_url}/v1/capabilities", api_key, timeout=2.0)
+        if capabilities.get("ok") and isinstance(capabilities.get("json"), dict):
+            probe["authenticated"] = True
+            caps = capabilities["json"]
+            features = caps.get("features") if isinstance(caps.get("features"), dict) else {}
+            probe["capabilities"] = {
+                "model": caps.get("model"),
+                "features": features,
+                "sessionKeyHeader": caps.get("session_key_header"),
+            }
+            probe["taskCapable"] = features.get("run_submission") is True and features.get("run_status") is True
+            probe["runEventsCapable"] = features.get("run_events_sse") is True
+            probe["approvalCapable"] = features.get("run_approval") is True
+            probe["stopCapable"] = features.get("run_stop") is True
+        else:
+            status = capabilities.get("status")
+            if status in {401, 403}:
+                probe["authenticated"] = False
+                probe["notes"].append("Hermes API rejected the configured bearer token.")
+            elif capabilities.get("error"):
+                probe["notes"].append(f"Capabilities check failed: {capabilities['error']}")
+
+        detailed = self._http_json(f"{base_url}/health/detailed", api_key, timeout=2.0)
+        if detailed.get("ok") and isinstance(detailed.get("json"), dict):
+            readiness = detailed["json"]
+            probe["readiness"] = {
+                "status": readiness.get("status", "unknown"),
+                "checks": readiness.get("readiness", {}).get("checks", {}) if isinstance(readiness.get("readiness"), dict) else {},
+            }
+
+        model_options = self._http_json(f"{base_url}/api/model/options", api_key, timeout=2.0)
+        if model_options.get("ok"):
+            probe["modelOptionsAvailable"] = True
+        return probe
+
+    def _http_json(self, url: str, api_key: str, *, timeout: float) -> dict[str, Any]:
+        req = urllib_request.Request(
+            url,
+            headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
+            method="GET",
+        )
+        try:
+            with urllib_request.urlopen(req, timeout=timeout) as response:
+                raw = response.read().decode("utf-8")
+                payload = json.loads(raw) if raw else {}
+                return {"ok": 200 <= response.status < 300, "status": response.status, "json": payload}
+        except urllib_error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            return {"ok": False, "status": exc.code, "error": detail[:240] or f"HTTP {exc.code}"}
+        except (OSError, TimeoutError, json.JSONDecodeError) as exc:
+            return {"ok": False, "error": str(exc)}

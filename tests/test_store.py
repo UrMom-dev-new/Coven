@@ -113,6 +113,52 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(reopened.runtime_session("morgana", namespace="demo"), "hermes-demo-456")
             self.assertIsNone(reopened.runtime_session("morgana", namespace="live", provider="other"))
 
+    def test_live_task_failure_records_one_terminal_event(self):
+        with TemporaryDirectory() as tmp:
+            store = self.make_store(tmp)
+            task = store.create_live_task(
+                assignee="ophelia",
+                title="Diagnose failure",
+                instructions="Inspect the broken run.",
+                priority="normal",
+                idempotency_key="coven-key-1",
+                session_id="session-1",
+                requested_runtime={"routeMode": "api", "provider": "openai", "model": "gpt-test"},
+            )
+            store.record_live_submission(task["id"], run_id="run-1", remote_status="running", session_id="session-1")
+
+            failed = store.update_live_task_from_run(
+                task["id"],
+                {
+                    "run_id": "run-1",
+                    "status": "failed",
+                    "error": "terminal failure from runtime",
+                    "events": [
+                        {"id": "remote-tool-1", "type": "tool.started", "tool": "shell"},
+                        {"id": "remote-tool-2", "type": "tool.completed", "tool": "shell"},
+                    ],
+                },
+            )
+            store.update_live_task_from_run(
+                task["id"],
+                {
+                    "run_id": "run-1",
+                    "status": "failed",
+                    "error": "terminal failure from runtime",
+                    "events": [{"id": "remote-tool-1", "type": "tool.started", "tool": "shell"}],
+                },
+            )
+
+            pending = store.pending_failure_events(namespace="live")
+            self.assertEqual(failed["status"], "failed")
+            self.assertTrue(failed["retryPolicy"]["exhausted"])
+            self.assertEqual(
+                [item["id"] for item in store.task(task["id"], namespace="live")["timeline"] if item["id"].startswith("remote-tool")],
+                ["remote-tool-1", "remote-tool-2"],
+            )
+            self.assertEqual(len(pending), 1)
+            self.assertEqual(pending[0]["taskId"], task["id"])
+
     def test_old_state_migrates_to_demo_with_backup(self):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "state.json"

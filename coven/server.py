@@ -151,6 +151,8 @@ class CovenHandler(BaseHTTPRequestHandler):
                 self._send_json({"witches": self.app.store.profiles()})
         elif path == "/api/tasks":
             if self._require_auth():
+                if self.app.namespace == "live" and hasattr(self.app.agent_adapter, "refresh_tasks"):
+                    self.app.agent_adapter.refresh_tasks()  # type: ignore[attr-defined]
                 scope = self.app.store.snapshot(
                     namespace=self.app.namespace,
                     advance_demo=self.app.namespace == "demo",
@@ -159,6 +161,8 @@ class CovenHandler(BaseHTTPRequestHandler):
         elif path.startswith("/api/tasks/"):
             if self._require_auth():
                 task_id = unquote(path.rsplit("/", 1)[-1])
+                if self.app.namespace == "live" and hasattr(self.app.agent_adapter, "refresh_tasks"):
+                    self.app.agent_adapter.refresh_tasks()  # type: ignore[attr-defined]
                 scope = self.app.store.snapshot(
                     namespace=self.app.namespace,
                     advance_demo=self.app.namespace == "demo",
@@ -226,17 +230,28 @@ class CovenHandler(BaseHTTPRequestHandler):
                 self._send_json({"messages": result.messages or [], "witchId": witch_id, "details": result.details}, HTTPStatus.CREATED)
             elif path == "/api/tasks":
                 runtime = self.app.runtime.get()
-                if self.app.namespace != "demo" and not runtime["hermesApi"]["configured"]:
+                if self.app.namespace != "demo" and not runtime["hermesApi"].get("taskCapable"):
                     self._send_error_json(
                         HTTPStatus.CONFLICT,
-                        "Hermes API transport is not configured. Live task dispatch remains unavailable.",
-                        code="hermes_api_unconfigured",
+                        "Hermes API transport is not ready for live task dispatch.",
+                        code="hermes_runs_unavailable",
                         details=runtime["hermesApi"],
                     )
                     return
                 result = self.app.agent_adapter.create_task(body)  # type: ignore[attr-defined]
                 task = result.task
                 self._send_json({"task": task}, HTTPStatus.CREATED)
+            elif path.startswith("/api/tasks/") and path.endswith("/stop"):
+                task_id = unquote(path.split("/")[-2])
+                result = self.app.agent_adapter.stop_task(task_id)  # type: ignore[attr-defined]
+                self._send_json({"task": result.task, "details": result.details})
+            elif path.startswith("/api/tasks/") and path.endswith("/approval"):
+                task_id = unquote(path.split("/")[-2])
+                decision = body.get("decision")
+                if not isinstance(decision, str):
+                    raise ValueError("decision must be a string.")
+                result = self.app.agent_adapter.resolve_approval(task_id, decision)  # type: ignore[attr-defined]
+                self._send_json({"task": result.task, "details": result.details})
             elif path.startswith("/api/tasks/") and path.endswith("/retry"):
                 task_id = unquote(path.split("/")[-2])
                 result = self.app.agent_adapter.retry_task(task_id)  # type: ignore[attr-defined]

@@ -708,6 +708,13 @@ time {
   font-size: 0.72rem;
 }
 
+.delivery-state {
+  display: block;
+  margin-top: 5px;
+  color: #f1dfb5;
+  font-size: 0.74rem;
+}
+
 .composer,
 .task-form {
   display: grid;
@@ -824,6 +831,15 @@ time {
 
 .task-detail li {
   margin-bottom: 6px;
+}
+
+.task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(122, 96, 55, 0.32);
 }
 
 .failure-overlay {
