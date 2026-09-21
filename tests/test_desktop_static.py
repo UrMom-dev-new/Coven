@@ -25,14 +25,16 @@ class DesktopStaticTests(unittest.TestCase):
 
     def test_windows_build_runs_packaged_executable_self_test(self):
         build_script = (ROOT / "scripts" / "build-windows.ps1").read_text(encoding="utf-8")
+        smoke_script = (ROOT / "scripts" / "smoke-windows.ps1").read_text(encoding="utf-8")
         workflow = (ROOT / ".github" / "workflows" / "windows-build.yml").read_text(encoding="utf-8")
         launcher = (ROOT / "scripts" / "start-coven.ps1").read_text(encoding="utf-8")
 
         self.assertIn('python-version: "3.12"', workflow)
-        self.assertIn("--self-test", build_script)
+        self.assertIn("smoke-windows.ps1", build_script)
+        self.assertIn("--self-test", smoke_script)
         self.assertIn("Approved reference image", build_script)
-        self.assertIn("--self-test", workflow)
-        self.assertIn("self-test failed", workflow)
+        self.assertIn("smoke-windows.ps1", workflow)
+        self.assertIn("self-test failed", smoke_script)
         self.assertIn("$SelfTest", launcher)
 
     def test_pyinstaller_spec_collects_webview_backend_modules(self):

@@ -14,6 +14,7 @@ permissions:
 jobs:
   windows-portable:
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -23,13 +24,13 @@ jobs:
         run: python -m unittest discover -s tests
       - name: Build portable bundle
         shell: pwsh
-        run: .\scripts\build-windows.ps1 -Clean
+        timeout-minutes: 20
+        run: .\scripts\build-windows.ps1 -Clean -SkipSmoke
       - name: Smoke executable boot path
         shell: pwsh
+        timeout-minutes: 2
         run: |
-          if (!(Test-Path .\dist\Coven\Coven.exe)) { throw "Coven.exe missing" }
-          $Smoke = Start-Process -FilePath .\dist\Coven\Coven.exe -ArgumentList @("--self-test", "--auth-token", "workflow-smoke-token") -Wait -PassThru
-          if ($Smoke.ExitCode -ne 0) { throw "Coven.exe self-test failed with exit code $($Smoke.ExitCode)" }
+          .\scripts\smoke-windows.ps1 -Exe .\dist\Coven\Coven.exe -Token workflow-smoke-token -TimeoutSeconds 45
           Get-ChildItem .\dist\Coven
       - uses: actions/upload-artifact@v4
         with:

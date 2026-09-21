@@ -11,11 +11,15 @@ $Repo = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Repo
 
 if ($Clean) {
+  Write-Host "Removing previous Windows build output..."
   Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
 }
 
+Write-Host "Installing Windows desktop dependencies..."
 python -m pip install --upgrade pip
 python -m pip install -e ".[desktop]"
+
+Write-Host "Building Coven portable bundle with PyInstaller..."
 python -m PyInstaller packaging\Coven.spec --noconfirm --clean
 
 $Bundle = Join-Path $Repo "dist\Coven"
@@ -36,10 +40,7 @@ if (-not ((Test-Path $InternalReference) -or (Test-Path $RootReference))) {
 }
 
 if (-not $SkipSmoke) {
-  $Smoke = Start-Process -FilePath $Exe -ArgumentList @("--self-test", "--auth-token", "windows-build-smoke-token") -Wait -PassThru
-  if ($Smoke.ExitCode -ne 0) {
-    throw "Portable executable self-test failed with exit code $($Smoke.ExitCode)"
-  }
+  & (Join-Path $Repo "scripts\smoke-windows.ps1") -Exe $Exe -Token "windows-build-smoke-token"
 }
 
 Write-Host "Portable bundle: $Bundle"

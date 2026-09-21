@@ -26,6 +26,7 @@ class AssetReleaseTests(unittest.TestCase):
             "packaging/Coven.spec",
             "packaging/installer/Coven.iss",
             "scripts/build-windows.ps1",
+            "scripts/smoke-windows.ps1",
             ".github/workflows/windows-build.yml",
         ]:
             self.assertTrue((ROOT / path).exists(), path)
@@ -42,6 +43,16 @@ class AssetReleaseTests(unittest.TestCase):
         source = (ROOT / "scripts" / "build-windows.ps1").read_text(encoding="utf-8")
 
         self.assertIn('$PSNativeCommandUseErrorActionPreference = $true', source)
+
+    def test_windows_executable_smoke_is_bounded_in_ci(self):
+        workflow = (ROOT / ".github" / "workflows" / "windows-build.yml").read_text(encoding="utf-8")
+        smoke_script = (ROOT / "scripts" / "smoke-windows.ps1").read_text(encoding="utf-8")
+
+        self.assertIn(".\\scripts\\build-windows.ps1 -Clean -SkipSmoke", workflow)
+        self.assertIn(".\\scripts\\smoke-windows.ps1", workflow)
+        self.assertIn("timeout-minutes: 2", workflow)
+        self.assertIn("TimeoutSeconds", smoke_script)
+        self.assertIn("Stop-Process", smoke_script)
 
 
 if __name__ == "__main__":
