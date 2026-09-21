@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 import socket
 import sys
+import tempfile
 import threading
 import time
 import webbrowser
+from urllib import error as urllib_error, request as urllib_request
 
 from .paths import APP_NAME, local_app_data, runtime_dir, webview_user_data_dir
 from .server import build_server
@@ -26,6 +29,10 @@ class DesktopBridge:
             return ""
         self._used = True
         return self._token
+
+
+class DesktopSelfTestError(RuntimeError):
+    """Raised when the packaged desktop smoke path fails."""
 
 
 def allocate_port() -> int:
@@ -52,6 +59,117 @@ def start_owned_server(port: int, data_dir: Path, config: Path | None, token: st
     return server, thread
 
 
+def _http_request(
+    method: str,
+    url: str,
+    *,
+    payload: dict[str, object] | None = None,
+    cookie: str | None = None,
+    timeout: float = 5.0,
+) -> tuple[int, dict[str, str], bytes]:
+    body = None if payload is None else json.dumps(payload).encode("utf-8")
+    headers = {"Accept": "application/json"}
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+        headers["X-Coven-Intent"] = "ui-action"
+    if cookie:
+        headers["Cookie"] = cookie
+    req = urllib_request.Request(url, data=body, headers=headers, method=method)
+    try:
+        with urllib_request.urlopen(req, timeout=timeout) as response:
+            return response.status, dict(response.headers.items()), response.read()
+    except urllib_error.HTTPError as exc:
+        return exc.code, dict(exc.headers.items()), exc.read()
+
+
+def _header(headers: dict[str, str], name: str) -> str:
+    for key, value in headers.items():
+        if key.lower() == name.lower():
+            return value
+    return ""
+
+
+def _json_body(body: bytes, context: str) -> dict[str, object]:
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise DesktopSelfTestError(f"{context} returned invalid JSON.") from exc
+    if not isinstance(payload, dict):
+        raise DesktopSelfTestError(f"{context} returned an unexpected JSON payload.")
+    return payload
+
+
+def run_self_test(args: argparse.Namespace) -> int:
+    previous_demo_mode = os.environ.get("COVEN_DEMO_MODE")
+    os.environ["COVEN_DEMO_MODE"] = "1"
+    token = args.auth_token or os.urandom(24).hex()
+    port = args.port or allocate_port()
+    temp_dir: tempfile.TemporaryDirectory[str] | None = None
+    data_dir = args.data_dir
+    if data_dir is None:
+        temp_dir = tempfile.TemporaryDirectory(prefix="coven-desktop-self-test-")
+        data_dir = Path(temp_dir.name)
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    server = None
+    try:
+        server, _thread = start_owned_server(port, data_dir, args.config, token)
+        if not wait_for_ready(port, timeout=args.self_test_timeout):
+            raise DesktopSelfTestError("The local Coven service did not become ready.")
+
+        base_url = f"http://127.0.0.1:{port}"
+        status, _headers, body = _http_request("GET", f"{base_url}/api/health")
+        if status != 200 or _json_body(body, "Health check").get("ok") is not True:
+            raise DesktopSelfTestError("Health check failed.")
+
+        status, headers, body = _http_request("POST", f"{base_url}/api/auth/session", payload={"token": token})
+        if status != 201 or _json_body(body, "Auth session").get("authenticated") is not True:
+            raise DesktopSelfTestError("Desktop auth session bootstrap failed.")
+        cookie = _header(headers, "Set-Cookie").split(";", 1)[0]
+        if not cookie:
+            raise DesktopSelfTestError("Auth session did not return a session cookie.")
+
+        status, _headers, body = _http_request("GET", f"{base_url}/", cookie=cookie)
+        shell = body.decode("utf-8", errors="replace")
+        required_markers = ["sanctuary-art", "portrait-crop", "journal-tabs", "workspaceMode"]
+        if status != 200 or any(marker not in shell for marker in required_markers):
+            raise DesktopSelfTestError("Authenticated app shell did not include required UI markers.")
+
+        status, _headers, body = _http_request("GET", f"{base_url}/api/tasks", cookie=cookie)
+        tasks_payload = _json_body(body, "Task list")
+        tasks = tasks_payload.get("tasks")
+        if status != 200 or not isinstance(tasks, list) or not any(
+            isinstance(task, dict) and task.get("title") == "Prepare project brief" for task in tasks
+        ):
+            raise DesktopSelfTestError("Seeded demo quest journal was not available.")
+
+        status, headers, _body = _http_request("HEAD", f"{base_url}/assets/reference/coven-approved-reference.png")
+        content_type = _header(headers, "Content-Type")
+        content_length = int(_header(headers, "Content-Length") or "0")
+        if status != 200 or content_type != "image/png" or content_length < 1_000_000:
+            raise DesktopSelfTestError("Approved reference image asset was not served from the bundle.")
+
+        status, headers, _body = _http_request("HEAD", f"{base_url}/styles.css")
+        if status != 200 or _header(headers, "Cache-Control") != "no-store":
+            raise DesktopSelfTestError("Dynamic static asset cache policy is not active.")
+
+        print("Coven desktop self-test passed.")
+        return 0
+    except Exception as exc:
+        print(f"Coven desktop self-test failed: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        if server is not None:
+            server.shutdown()
+            server.server_close()
+        if temp_dir is not None:
+            temp_dir.cleanup()
+        if previous_demo_mode is None:
+            os.environ.pop("COVEN_DEMO_MODE", None)
+        else:
+            os.environ["COVEN_DEMO_MODE"] = previous_demo_mode
+
+
 def detect_webview2() -> tuple[bool, str]:
     if os.name != "nt":
         return False, "WebView2 availability can only be checked on Windows."
@@ -74,6 +192,8 @@ def detect_webview2() -> tuple[bool, str]:
 
 
 def run_desktop(args: argparse.Namespace) -> int:
+    if args.demo:
+        os.environ["COVEN_DEMO_MODE"] = "1"
     app_data = local_app_data()
     data_dir = args.data_dir or app_data / "state"
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -142,10 +262,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--auth-token", default=None)
     parser.add_argument("--browser", action="store_true", help="Use the authenticated development browser instead of pywebview.")
+    parser.add_argument("--demo", action="store_true", help="Run with the isolated demo namespace.")
+    parser.add_argument("--self-test", action="store_true", help="Boot the local desktop service, validate bundled assets, then exit.")
+    parser.add_argument("--self-test-timeout", type=float, default=8.0)
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--remote-debugging-port", type=int, default=None)
     args = parser.parse_args(argv)
     try:
+        if args.self_test:
+            return run_self_test(args)
         return run_desktop(args)
     except Exception as exc:
         print(f"Coven startup failed: {exc}", file=sys.stderr)

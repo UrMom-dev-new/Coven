@@ -20,6 +20,11 @@ class FrontendStaticTests(unittest.TestCase):
         self.assertNotIn("location.search", source)
         self.assertNotIn("URLSearchParams", source)
 
+    def test_auth_page_waits_for_pywebview_api(self):
+        source = (ROOT / "public" / "src" / "auth.js").read_text(encoding="utf-8")
+        self.assertIn("pywebviewready", source)
+        self.assertIn("refreshDesktopUnlock", source)
+
 
 if __name__ == "__main__":
     unittest.main()

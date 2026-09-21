@@ -2,9 +2,9 @@
 
 Repository: `HermesAvatar`
 
-Coven is a local gothic adventure-game shell for a Hermes Agent workspace. It starts in an illustrated sanctuary with six configurable witch profiles, durable text conversations, a quest journal, explicit task assignment, local/API routing status, and a presentation-only Ophelia river failure scene.
+Coven is a local gothic adventure-game shell for a Hermes Agent workspace. It starts in an approved-reference sanctuary with six configurable witch profiles, durable text conversations, a quest journal, explicit task assignment, local/API routing status, desktop/browser launch paths, and a presentation-only Ophelia river failure scene.
 
-This first implementation is intentionally dependency-light: Python 3.11+ standard library for the loopback server and static browser assets for the UI. Live Hermes dispatch is gated behind a clear adapter boundary and currently fails visibly unless Hermes is available and the adapter is completed. Demo mode is explicit and separate.
+This implementation is intentionally dependency-light: Python 3.11+ standard library for the loopback server and static browser assets for the UI, with optional pywebview/PyInstaller dependencies for the Windows desktop shell. Live Hermes chat is routed through a clear adapter boundary when the API server is configured; live task lifecycle dispatch remains blocked until an authoritative Hermes task/run contract is verified. Demo mode is explicit and separate.
 
 ## Run
 
@@ -29,11 +29,19 @@ python -m pip install -e ".[desktop]"
 python -m coven.desktop
 ```
 
+Desktop boot smoke without opening a GUI:
+
+```powershell
+python -m coven.desktop --self-test
+```
+
 Portable Windows build:
 
 ```powershell
 .\scripts\build-windows.ps1 -Clean
 ```
+
+The build script verifies that `dist\Coven\Coven.exe`, bundled public assets and the approved reference image are present, then runs `Coven.exe --self-test` unless `-SkipSmoke` is supplied.
 
 Demo fixture mode for UI and cinematic testing:
 
@@ -55,20 +63,21 @@ python3 -m unittest discover -s tests
 - Loopback-only local server in `coven.server`.
 - Runtime inspection for Hermes, Ollama, OpenAI env configuration, and a development-machine hardware summary.
 - Six configurable profiles in `config/witches.json`.
-- Static sanctuary UI with keyboard-accessible roster and hotspots.
+- Approved-reference sanctuary UI with keyboard-accessible roster and hotspots.
 - Separate conversation composer and task assignment form.
-- Quest journal with assignee, state, latest update, timeline, blockers, evidence, result, retry action, and mode labels.
-- Push-to-talk recording control that uses browser microphone permission and leaves transcript editing to the user when local transcription is not configured.
+- Quest journal with assignee, state, latest update, timeline, blockers, evidence, result, retry action, mode labels, segmented filters, and quick controls.
+- Browser/WebView speech recognition when available, plus speech synthesis for unmuted witch replies; unsupported runtimes are labeled honestly.
 - Presentation controller for Ophelia's river scene that consumes immutable terminal failure events and cannot mutate task outcomes.
 - Demo adapter fixtures for completed, failed, duplicate-safe, skipped, and retried task flows.
+- Desktop unlock bridge for the pywebview shell, browser fallback launcher and packaged executable self-test.
 
 ## What Is Not Claimed Yet
 
-- Live Hermes chat/task dispatch is not implemented in this starter.
+- Live Hermes task/run lifecycle dispatch is not claimed yet.
 - Hermes was not installed in the development environment used for this commit.
 - The Dell Inspiron target hardware was not available, so Windows behavior, performance, local transcription benchmarking, and browser codec behavior still require validation there.
 - No OpenAI API credential was available in this environment, so live API calls were not exercised.
-- The bundled art is original lightweight SVG, not final generated bitmap/video production art.
+- The main sanctuary and portrait presentation now use the approved reference bitmap. Native animation/video polish and Windows high-DPI visual acceptance still require target-machine validation.
 
 See `docs/integration-note.md`, `docs/permission-matrix.md`, and `docs/validation.md` for the implementation contract and remaining gates.
 

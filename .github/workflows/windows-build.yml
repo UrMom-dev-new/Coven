@@ -20,10 +20,12 @@ jobs:
       - name: Build portable bundle
         shell: pwsh
         run: .\scripts\build-windows.ps1 -Clean
-      - name: Smoke executable help
+      - name: Smoke executable boot path
         shell: pwsh
         run: |
           if (!(Test-Path .\dist\Coven\Coven.exe)) { throw "Coven.exe missing" }
+          $Smoke = Start-Process -FilePath .\dist\Coven\Coven.exe -ArgumentList @("--self-test", "--auth-token", "workflow-smoke-token") -Wait -PassThru
+          if ($Smoke.ExitCode -ne 0) { throw "Coven.exe self-test failed with exit code $($Smoke.ExitCode)" }
           Get-ChildItem .\dist\Coven
       - uses: actions/upload-artifact@v4
         with:

@@ -51,7 +51,9 @@ class AgentAdapterTests(unittest.TestCase):
             store = CovenStore(Path(tmp), PROFILE_PATH)
             adapter = DemoAdapter(store)
             result = adapter.send_message("morgana", "hello")
-            self.assertEqual(len(result.messages), 2)
+            self.assertEqual(len(result.messages), 4)
+            self.assertEqual(result.messages[-2]["text"], "hello")
+            self.assertEqual(result.messages[-1]["author"], "morgana")
 
             task = adapter.create_task(
                 {"assignee": "circe", "title": "demo", "instructions": "do it", "priority": "normal"}

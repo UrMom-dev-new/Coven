@@ -121,6 +121,9 @@ function applySettings() {
   $("toggleCinematics").checked = Boolean(state.settings.cinematicsEnabled);
   $("motionMode").value = state.settings.reducedMotionMode;
   $("qualityMode").value = state.settings.animationQuality;
+  $("soundSummary").textContent = state.settings.mute ? "Off" : "On";
+  $("motionSummary").textContent = statusLabel(state.settings.reducedMotionMode);
+  $("failureSummary").textContent = state.settings.cinematicsEnabled ? "On" : "Off";
   document.body.classList.toggle("quality-low", state.settings.animationQuality === "low");
   document.body.classList.toggle("muted", Boolean(state.settings.mute));
   state.game?.setQuality(state.settings.animationQuality);
@@ -184,7 +187,11 @@ function renderRoster() {
       type: "button",
       dataset: { selected: witch.id === state.selectedWitch },
     }, [
-      node("img", { attrs: { src: witch.asset, alt: `${witch.name} portrait`, loading: "lazy" } }),
+      node("span", {
+        className: "portrait-crop",
+        dataset: { witch: witch.id },
+        attrs: { role: "img", "aria-label": `${witch.name} portrait` },
+      }),
       node("span", { text: witch.name }),
       node("small", { text: witch.title }),
       node("b", { text: runtimeStateFor(witch.id) }),
@@ -205,7 +212,7 @@ function renderHotspots() {
       title: `${witch.name}: ${witch.station}`,
       ariaLabel: `${witch.name}, ${witch.station}`,
       dataset: { selected: witch.id === state.selectedWitch },
-      text: witch.name[0] || "?",
+      text: witch.name,
     });
     button.style.left = position.left;
     button.style.top = position.top;
@@ -223,8 +230,8 @@ function selectWitch(id, options = { fetchConversation: true }) {
   $("witchTitle").textContent = witch.title;
   $("witchRole").textContent = witch.responsibilities;
   $("providerLabel").textContent = witch.providerLabel;
-  $("portrait").src = witch.asset;
-  $("portrait").alt = `${witch.name} portrait`;
+  $("portrait").dataset.witch = witch.id;
+  $("portrait").setAttribute("aria-label", `${witch.name} portrait`);
   document.documentElement.style.setProperty("--witch-accent", witch.accent);
   state.game?.setSelected(witch.id);
   renderRoster();
@@ -261,10 +268,14 @@ function statusLabel(status) {
 
 function renderTasks() {
   $("taskCount").textContent = String(state.tasks.length);
+  renderTaskFilters();
   const list = $("taskList");
   const previousScroll = list.scrollTop;
   clear(list);
   const visibleTasks = state.tasks.filter((task) => taskMatchesFilter(task, state.taskFilter));
+  if (visibleTasks.length && !visibleTasks.some((task) => task.id === state.selectedTask)) {
+    state.selectedTask = visibleTasks[0].id;
+  }
   if (!visibleTasks.length) {
     list.append(node("p", { className: "empty-state", text: "No tasks recorded yet." }));
   }
@@ -275,7 +286,11 @@ function renderTasks() {
       type: "button",
       dataset: { status: task.status, selected: task.id === state.selectedTask },
     }, [
-      node("img", { attrs: { src: assignee?.asset || "/assets/witches/morgana.svg", alt: "", loading: "lazy" } }),
+      node("span", {
+        className: "portrait-crop",
+        dataset: { witch: assignee?.id || "morgana" },
+        attrs: { "aria-hidden": "true" },
+      }),
       node("div", { className: "task-copy" }, [
         node("span", { text: task.title }),
         node("small", { text: `${assignee?.name || task.assignee} - ${statusLabel(task.status)}` }),
@@ -298,11 +313,17 @@ function renderTasks() {
 }
 
 function taskMatchesFilter(task, filter) {
-  if (filter === "active") return ["queued", "running"].includes(task.status);
+  if (filter === "active") return ["queued", "running", "needs input", "needs_input", "awaiting authorization", "awaiting_authorization", "failed"].includes(task.status);
   if (filter === "needs") return ["needs input", "needs_input", "awaiting authorization", "awaiting_authorization"].includes(task.status);
   if (filter === "completed") return task.status === "completed";
   if (filter === "failed") return task.status === "failed";
   return true;
+}
+
+function renderTaskFilters() {
+  document.querySelectorAll(".journal-tab").forEach((button) => {
+    button.setAttribute("aria-selected", String(button.dataset.filter === state.taskFilter));
+  });
 }
 
 function renderTaskDetail(task) {
@@ -365,6 +386,7 @@ async function sendMessage(event) {
     if (state.selectedWitch === witchId) {
       input.value = "";
       renderTranscript();
+      speakLatestWitchMessage(payload.messages);
     }
   } catch (error) {
     setNotice(error.message, "error");
@@ -406,19 +428,74 @@ async function retryTask(taskId) {
 }
 
 function updateVoiceAvailability() {
-  $("recordButton").disabled = true;
-  $("recordButton").textContent = "Voice unavailable";
-  $("voiceState").textContent = "Voice is not implemented in this build";
+  const Recognition = speechRecognitionConstructor();
+  $("recordButton").disabled = !Recognition;
+  $("recordButton").textContent = Recognition ? "Push to talk" : "Voice unavailable";
+  $("voiceState").textContent = Recognition ? "Voice ready" : "Voice unavailable in this WebView";
   $("stopSpeakingButton").disabled = !("speechSynthesis" in window);
 }
 
-function voiceUnavailable() {
-  setNotice("Voice capture is not wired to a transcriber yet. Text workflows are fully available.", "warn");
+function speechRecognitionConstructor() {
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function toggleRecording() {
+  if (state.recording) {
+    state.recording.stop();
+    return;
+  }
+  const Recognition = speechRecognitionConstructor();
+  if (!Recognition) {
+    setNotice("This browser/WebView does not expose speech recognition. Text workflows are fully available.", "warn");
+    return;
+  }
+  const recognition = new Recognition();
+  recognition.lang = "en-US";
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  state.recording = recognition;
+  $("recordButton").textContent = "Listening...";
+  $("voiceState").textContent = "Listening";
+  recognition.addEventListener("result", (event) => {
+    const transcript = Array.from(event.results)
+      .map((result) => result[0]?.transcript || "")
+      .join(" ")
+      .trim();
+    if (transcript) {
+      const input = $("messageInput");
+      input.value = input.value ? `${input.value.trim()} ${transcript}` : transcript;
+      input.focus();
+      $("voiceState").textContent = "Transcript ready";
+    }
+  });
+  recognition.addEventListener("error", (event) => {
+    setNotice(`Voice recognition failed: ${event.error || "unknown error"}.`, "warn");
+  });
+  recognition.addEventListener("end", () => {
+    state.recording = null;
+    $("recordButton").textContent = "Push to talk";
+    if ($("voiceState").textContent === "Listening") $("voiceState").textContent = "Voice ready";
+  });
+  recognition.start();
 }
 
 function stopSpeech() {
+  if (state.recording) state.recording.stop();
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   $("voiceState").textContent = "Speech stopped";
+}
+
+function speakLatestWitchMessage(messages) {
+  if (state.settings.mute || !("speechSynthesis" in window)) return;
+  const latest = [...(messages || [])].reverse().find((message) => message.author !== "user");
+  if (!latest?.text) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(latest.text);
+  utterance.rate = 0.94;
+  utterance.pitch = 0.92;
+  window.speechSynthesis.speak(utterance);
+  $("voiceState").textContent = "Speaking";
 }
 
 function clearCinematicTimer() {
@@ -533,7 +610,7 @@ function setActiveView(view) {
 function bindEvents() {
   $("messageForm").addEventListener("submit", sendMessage);
   $("taskForm").addEventListener("submit", assignTask);
-  $("recordButton").addEventListener("click", voiceUnavailable);
+  $("recordButton").addEventListener("click", toggleRecording);
   $("stopSpeakingButton").addEventListener("click", stopSpeech);
   $("compactToggle").addEventListener("click", () => {
     state.compact = !state.compact;
@@ -544,14 +621,23 @@ function bindEvents() {
     button.addEventListener("click", () => setActiveView(button.dataset.view || "sanctuary"));
   });
   $("dismissOnboarding").addEventListener("click", () => document.querySelector(".onboarding-panel")?.classList.add("dismissed"));
-  $("taskFilter").addEventListener("change", (event) => {
-    state.taskFilter = event.target.value;
-    renderTasks();
+  document.querySelectorAll(".journal-tab").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.taskFilter = button.dataset.filter || "all";
+      renderTasks();
+    });
   });
   $("toggleMute").addEventListener("change", (event) => updateSettings({ mute: event.target.checked }).catch((error) => setNotice(error.message, "error")));
   $("toggleCinematics").addEventListener("change", (event) => updateSettings({ cinematicsEnabled: event.target.checked }).catch((error) => setNotice(error.message, "error")));
   $("motionMode").addEventListener("change", (event) => updateSettings({ reducedMotionMode: event.target.value }).catch((error) => setNotice(error.message, "error")));
   $("qualityMode").addEventListener("change", (event) => updateSettings({ animationQuality: event.target.value }).catch((error) => setNotice(error.message, "error")));
+  $("journalMuteToggle").addEventListener("click", () => updateSettings({ mute: !state.settings.mute }).catch((error) => setNotice(error.message, "error")));
+  $("journalFailureToggle").addEventListener("click", () => updateSettings({ cinematicsEnabled: !state.settings.cinematicsEnabled }).catch((error) => setNotice(error.message, "error")));
+  $("journalMotionToggle").addEventListener("click", () => {
+    const modes = ["full", "tableau", "off"];
+    const next = modes[(modes.indexOf(state.settings.reducedMotionMode) + 1) % modes.length] || "tableau";
+    updateSettings({ reducedMotionMode: next }).catch((error) => setNotice(error.message, "error"));
+  });
   $("skipSceneButton").addEventListener("click", () => finishFailureScene("skipped"));
   $("skipAllButton").addEventListener("click", () => skipAllFailures().catch((error) => setNotice(error.message, "error")));
   $("inspectFailureButton").addEventListener("click", inspectCurrentFailure);

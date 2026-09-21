@@ -2,7 +2,8 @@ param(
   [int]$Port = 8765,
   [switch]$Demo,
   [switch]$Open,
-  [switch]$Desktop
+  [switch]$Desktop,
+  [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
@@ -38,4 +39,5 @@ if ($Desktop) {
 $Args = @("-m", $Module, "--port", "$Port")
 if (-not $Desktop) { $Args = @("-m", $Module, "--host", "127.0.0.1", "--port", "$Port") }
 if ($Open -and -not $Desktop) { $Args += "--open" }
+if ($SelfTest -and $Desktop) { $Args += "--self-test" }
 & $Python.Source $Args

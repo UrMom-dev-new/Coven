@@ -371,6 +371,19 @@ dd {
     var(--panel);
 }
 
+.sanctuary-panel {
+  position: relative;
+}
+
+.sanctuary-panel > .panel-heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .panel-heading,
 .subheading-row,
 .action-row {
@@ -388,7 +401,7 @@ dd {
 
 .sanctuary-stage {
   position: relative;
-  aspect-ratio: 16 / 10.35;
+  aspect-ratio: 960 / 630;
   min-height: 360px;
   border: 1px solid var(--brass-line);
   border-radius: 0;
@@ -397,11 +410,16 @@ dd {
   box-shadow: inset 0 0 0 1px rgba(255, 222, 156, 0.08);
 }
 
-.sanctuary-stage img {
+.sanctuary-art {
+  position: absolute;
+  inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  display: block;
+  background-image: url("/assets/reference/coven-approved-reference.png");
+  background-repeat: no-repeat;
+  background-size: 174.17% 149.37%;
+  background-position: 0.7% 31.2%;
 }
 
 #sanctuaryCanvas {
@@ -433,22 +451,31 @@ dd {
 
 .hotspot {
   position: absolute;
-  width: 42px;
-  height: 42px;
-  margin-left: -21px;
-  margin-top: -21px;
-  border-radius: 50%;
-  padding: 0;
-  background: #10141c;
-  border: 2px solid var(--witch-accent);
-  font-weight: 800;
+  min-width: 58px;
+  min-height: 24px;
+  margin-left: -29px;
+  margin-top: -12px;
+  border-radius: 5px;
+  padding: 0 8px;
+  background: rgba(10, 14, 18, 0.84);
+  border: 1px solid var(--witch-accent);
+  color: var(--text);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  opacity: 0;
   pointer-events: auto;
   box-shadow: 0 5px 18px rgba(0, 0, 0, 0.42);
 }
 
+.hotspot:focus-visible {
+  opacity: 1;
+}
+
 .hotspot[data-selected="true"] {
-  background: var(--witch-accent);
-  color: #101014;
+  background: rgba(38, 30, 18, 0.92);
+  color: var(--text);
+  box-shadow: 0 0 0 1px rgba(215, 180, 106, 0.36), 0 0 20px rgba(215, 180, 106, 0.22);
 }
 
 .roster {
@@ -466,6 +493,35 @@ dd {
   border-color: #343e4e;
 }
 
+.journal-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid #3f4a59;
+  border-radius: 7px;
+  overflow: hidden;
+  margin: 8px 0 12px;
+  background: #0d141c;
+}
+
+.journal-tab {
+  min-height: 38px;
+  border: 0;
+  border-right: 1px solid #2d3744;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.journal-tab:last-child {
+  border-right: 0;
+}
+
+.journal-tab[aria-selected="true"] {
+  color: var(--text);
+  background: linear-gradient(180deg, rgba(215, 180, 106, 0.24), rgba(122, 96, 55, 0.34));
+  box-shadow: inset 0 0 0 1px rgba(215, 180, 106, 0.6);
+}
+
 .roster-button {
   display: grid;
   grid-template-rows: minmax(74px, 1fr) auto auto;
@@ -477,11 +533,44 @@ dd {
   text-align: center;
 }
 
-.roster-button img {
+.portrait-crop {
+  display: block;
+  background-image: url("/assets/reference/coven-approved-reference.png");
+  background-repeat: no-repeat;
+  background-size: 1161.11% 566.87%;
+  background-position: 1.57% 94.58%;
+}
+
+.portrait-crop[data-witch="morgana"] {
+  background-size: 1145.21% 566.87%;
+  background-position: 1.57% 94.58%;
+}
+
+.portrait-crop[data-witch="sybil"] {
+  background-position: 11.98% 94.58%;
+}
+
+.portrait-crop[data-witch="circe"] {
+  background-position: 22.05% 94.58%;
+}
+
+.portrait-crop[data-witch="hecate"] {
+  background-position: 32.13% 94.58%;
+}
+
+.portrait-crop[data-witch="selene"] {
+  background-position: 42.28% 94.58%;
+}
+
+.portrait-crop[data-witch="ophelia"] {
+  background-position: 52.36% 94.58%;
+}
+
+.roster-button .portrait-crop {
   width: 100%;
   height: 86px;
-  object-fit: cover;
-  background: #0a0f15;
+  background-color: #0a0f15;
+  background-image: url("/assets/reference/coven-approved-reference.png");
   border-bottom: 1px solid rgba(122, 96, 55, 0.48);
 }
 
@@ -500,13 +589,13 @@ dd {
   padding: 8px;
 }
 
-.task-row img {
+.task-row .portrait-crop {
   width: 56px;
   height: 56px;
-  object-fit: cover;
   border-radius: 5px;
   border: 1px solid rgba(122, 96, 55, 0.58);
-  background: #0a0f15;
+  background-color: #0a0f15;
+  background-image: url("/assets/reference/coven-approved-reference.png");
 }
 
 .task-copy {
@@ -573,13 +662,13 @@ dd {
   padding-bottom: 12px;
 }
 
-.character-frame img {
+.character-frame .portrait-crop {
   width: 100%;
   height: min(30vh, 250px);
-  object-fit: cover;
   border-radius: 6px;
   border: 1px solid var(--brass-line);
-  background: #0b0f16;
+  background-color: #0b0f16;
+  background-image: url("/assets/reference/coven-approved-reference.png");
 }
 
 .transcript-wrap {
@@ -635,6 +724,22 @@ time {
   background: #0c1118;
 }
 
+.advanced-task-options {
+  display: grid;
+  gap: 8px;
+}
+
+.advanced-task-options summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.advanced-task-options[open] {
+  border-top: 1px solid rgba(122, 96, 55, 0.32);
+  padding-top: 8px;
+}
+
 .task-list {
   display: grid;
   gap: 8px;
@@ -665,6 +770,36 @@ time {
   max-height: calc(100vh - 440px);
   min-height: 180px;
   overflow: auto;
+}
+
+.journal-footer {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin: 14px -10px -10px;
+  border-top: 1px solid rgba(122, 96, 55, 0.48);
+}
+
+.control-tile {
+  display: grid;
+  gap: 6px;
+  place-items: center;
+  min-height: 92px;
+  border-width: 0 1px 0 0;
+  border-color: rgba(122, 96, 55, 0.34);
+  border-radius: 0;
+  background: rgba(8, 13, 18, 0.65);
+  color: var(--muted);
+  text-align: center;
+}
+
+.control-tile:last-child {
+  border-right: 0;
+}
+
+.control-tile strong {
+  color: var(--text);
+  font-size: 0.9rem;
 }
 
 .task-detail dl,
@@ -1001,5 +1136,14 @@ time {
   .task-mode-badge {
     grid-column: 2;
     justify-self: start;
+  }
+
+  .journal-footer {
+    grid-template-columns: 1fr;
+  }
+
+  .control-tile {
+    min-height: 58px;
+    border-width: 0 0 1px;
   }
 }

@@ -4,11 +4,18 @@
   "assets": [
     {
       "id": "sanctuary-background",
-      "path": "/assets/sanctuary.svg",
-      "kind": "layered-svg",
-      "dimensions": [1400, 720],
-      "origin": "Created in-repo with vector primitives.",
+      "path": "/assets/reference/coven-approved-reference.png",
+      "kind": "approved-reference-css-crop",
+      "dimensions": [960, 630],
+      "origin": "CSS crop from the user-approved reference render.",
       "anchors": { "world": [0, 0] }
+    },
+    {
+      "id": "approved-reference-source",
+      "path": "/assets/reference/coven-approved-reference.png",
+      "kind": "approved-reference-source",
+      "dimensions": [1672, 941],
+      "origin": "User-approved production reference render."
     },
     {
       "id": "ophelia-river-tableau",
@@ -21,10 +28,10 @@
     },
     {
       "id": "witch-portraits",
-      "path": "/assets/witches/*.svg",
-      "kind": "portrait-set",
-      "dimensions": [360, 480],
-      "origin": "Created in-repo with vector primitives.",
+      "path": "/assets/reference/coven-approved-reference.png",
+      "kind": "approved-reference-css-portrait-crops",
+      "dimensions": [146, 166],
+      "origin": "CSS crops from the user-approved reference render.",
       "states": ["idle", "selected", "working", "awaiting_input", "success", "terminal_failure_recovery"]
     },
     {

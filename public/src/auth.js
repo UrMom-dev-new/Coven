@@ -29,8 +29,14 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-if (desktopButton) {
+function refreshDesktopUnlock() {
+  if (!desktopButton) return;
   desktopButton.hidden = !(window.pywebview?.api?.start_session);
+}
+
+if (desktopButton) {
+  refreshDesktopUnlock();
+  window.addEventListener("pywebviewready", refreshDesktopUnlock);
   desktopButton.addEventListener("click", async () => {
     notice.textContent = "Requesting desktop session...";
     notice.dataset.tone = "info";

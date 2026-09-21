@@ -10,6 +10,8 @@ No Windows VM, Dell Inspiron, WebView2 runtime, Hermes install, microphone hardw
 - Inno Setup script: `packaging/installer/Coven.iss`.
 - GitHub Actions Windows build workflow: `.github/workflows/windows-build.yml`.
 - Authenticated development-browser fallback: `python -m coven.desktop --browser`.
+- Headless desktop boot smoke: `python -m coven.desktop --self-test`.
+- Portable executable smoke gate: `dist\Coven\Coven.exe --self-test` from `scripts/build-windows.ps1` and the Windows workflow.
 
 ## Acceptance Scenarios
 
@@ -17,12 +19,13 @@ No Windows VM, Dell Inspiron, WebView2 runtime, Hermes install, microphone hardw
 |---|---|---|
 | Fresh install -> onboarding -> real API chat -> real scoped task -> verifiable output | Unverified | Requires Windows build, Hermes API server and provider credentials. |
 | Local-model chat/task | Unverified | Ollama availability was not verified on Windows; Hermes task tools are unverified. |
-| Sanctuary exploration and compact work view | Partially implemented | Canvas movement and station interaction are implemented; real browser/Windows visual QA remains. |
+| Sanctuary exploration and compact work view | Partially implemented | Canvas movement, station interaction and approved-reference UI shell smoke are implemented; real WebView2/Windows visual QA remains. |
 | Needs-input/approval/cancel/retry/evidence preservation | Partial | Demo retry/evidence exists; live approval/cancel require Hermes task contract. |
 | Controlled terminal failure -> one Ophelia scene -> report -> recovery | Fixture-tested at API level | Browser playback on Windows remains unverified. |
-| Voice round-trip | Unverified | Voice service boundary exists; transcription/speech providers are not configured. |
+| Voice round-trip | Partial | Browser/WebView speech APIs are used when available; microphone permission, installed Windows voices and transcription quality remain unverified. |
 | Restart during run, provider disconnect/reconnect, sleep/resume, duplicate launch | Partial | Single-instance guard implemented; live run reconciliation requires Hermes. |
 | Missing model/key/WebView2/malformed events/hostile HTML/unauthorized local requests | Partial | Auth/origin/malformed event/HTML regressions tested; WebView2 missing path is code-only. |
+| Portable executable boots authenticated app shell | Source-tested, Windows pending | `python -m coven.desktop --self-test` passed on macOS source tree; Windows CI now runs the packaged `Coven.exe --self-test` when pushed. |
 | Upgrade/uninstall/reinstall with retained data, paths with spaces/non-ASCII, standard user, high DPI | Unverified | Requires clean Windows VM and installer run. |
 
 ## Engineering Targets To Measure

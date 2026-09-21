@@ -8,8 +8,12 @@ Run:
 python3 -m unittest discover -s tests
 /Users/nefarioususer/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check public/src/app.js
 /Users/nefarioususer/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check public/src/auth.js
+/Users/nefarioususer/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check public/src/api.js
+/Users/nefarioususer/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check public/src/dom.js
 /Users/nefarioususer/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check public/src/game.js
+/Users/nefarioususer/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check public/src/presentation.js
 python3 -m compileall coven tests
+python3 -m coven.desktop --self-test
 ```
 
 Current tests cover:
@@ -23,20 +27,23 @@ Current tests cover:
 - Unknown failed events do not trigger Ophelia's scene.
 - One-time auth bootstrap, session cookies and wrong-origin rejection.
 - Demo/live namespace isolation and v1 state migration with backup.
+- Seeded approved-reference demo task fixtures that stay static during demo advancement.
 - Persisted presentation preference validation.
 - Static frontend checks for no dynamic `innerHTML` in the app controller and explicit `[hidden]` overlay CSS.
 - Demo and Hermes adapter boundary behavior.
-- Asset manifest/package scaffold existence.
+- Asset manifest/package scaffold existence and static server cache/HEAD behavior.
 - Canvas sanctuary module visibility pause and station interaction event wiring.
+- Desktop unlock visibility after the pywebview API-ready event.
+- Desktop bridge one-time token behavior, packaged self-test source markers, Windows build self-test hook and PyInstaller WebView backend collection.
 - Voice status boundary.
 
 Most recent run in this environment:
 
 ```text
 python3 -m unittest discover -s tests
-Ran 24 tests in 0.011s - OK
+Ran 33 tests in 0.021s - OK
 
-node --check public/src/app.js / auth.js / api.js / dom.js / game.js / presentation.js
+/Users/nefarioususer/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check public/src/app.js / auth.js / api.js / dom.js / game.js / presentation.js
 python3 -m compileall coven tests
 OK
 ```
@@ -76,6 +83,43 @@ GET /api/failure-events after demo failure -> structured terminal_failure event
 GET /api/voice/status with cookie -> 200 structured unavailable status
 ```
 
+Authenticated browser visual smoke performed on macOS development host after the approved-reference UI pass:
+
+```text
+COVEN_DEMO_MODE=1 python3 -u -m coven.server --host 127.0.0.1 --port 8896 --data-dir .coven-data/production-visual-smoke-2 --auth-token visual-smoke-token-2
+Unlocked in the browser with the one-time token.
+Approved sanctuary art, portrait crops, seeded Morgana conversation, seeded Quest Journal, All/Active/Done filters and quick-control footer rendered visibly.
+Hotspots remained accessible without duplicate visible labels over the approved artwork.
+```
+
+Authenticated local working-app smoke performed on macOS development host after the static server/auth reliability pass:
+
+```text
+COVEN_DEMO_MODE=1 python3 -u -m coven.server --host 127.0.0.1 --port 8898 --data-dir .coven-data/working-app-smoke --auth-token working-smoke-token
+POST /api/auth/session -> 201 authenticated
+GET / -> 200 text/html app shell, including sanctuary-art, portrait-crop, journal-tabs, settingsPanel, demoBadge and workspaceMode markers
+GET /api/tasks -> 200 seeded demo Quest Journal tasks
+GET /api/conversations/morgana -> 200 seeded approved-reference conversation
+HEAD /assets/reference/coven-approved-reference.png -> 200 image/png, Cache-Control: public, max-age=3600
+HEAD /styles.css -> 200 text/css, Cache-Control: no-store
+```
+
+Desktop self-test smoke performed on macOS development host after the Windows packaging pass:
+
+```text
+python3 -m coven.desktop --self-test --data-dir .coven-data/desktop-self-test --auth-token desktop-self-test-token
+GET /api/health -> 200
+POST /api/auth/session -> 201
+GET / -> 200
+GET /api/tasks -> 200
+HEAD /assets/reference/coven-approved-reference.png -> 200
+HEAD /styles.css -> 200
+Coven desktop self-test passed.
+
+python3 -m coven.desktop --self-test --auth-token desktop-temp-self-test-token
+Default temporary data directory self-test also passed.
+```
+
 ## Not Verified In This Environment
 
 - Live Hermes dispatch and event streaming.
@@ -84,7 +128,7 @@ GET /api/voice/status with cookie -> 200 structured unavailable status
 - Ollama local model smoke test, because the local service did not answer from this sandbox.
 - OpenAI live API test, because no credential was available.
 - Local transcription benchmark and installed Windows voices.
-- Real browser visual inspection after the Prompt 1 UI rewrite. The HTTP API was smoke-tested, and JavaScript syntax was checked, but WebView2/Windows rendering remains unverified.
-- PyInstaller/pywebview bundle creation on Windows.
+- WebView2/Windows visual inspection after the approved-reference UI rewrite. macOS browser visual smoke passed, but Windows rendering remains unverified.
+- PyInstaller/pywebview bundle creation on Windows. The workflow/build script now runs `Coven.exe --self-test`, but that Windows runner has not been executed in this environment.
 - Inno Setup installer validation.
 - Canvas frame timing and high-DPI layout on Windows.

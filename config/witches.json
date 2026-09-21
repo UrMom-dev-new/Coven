@@ -10,7 +10,7 @@
       "providerLabel": "Hermes profile: morgana",
       "voice": "calm alto",
       "accent": "#d7b46a",
-      "asset": "/assets/witches/morgana.svg"
+      "asset": "/assets/reference/coven-approved-reference.png"
     },
     {
       "id": "sybil",
@@ -22,7 +22,7 @@
       "providerLabel": "Hermes profile: sybil",
       "voice": "measured contralto",
       "accent": "#8fc7d8",
-      "asset": "/assets/witches/sybil.svg"
+      "asset": "/assets/reference/coven-approved-reference.png"
     },
     {
       "id": "circe",
@@ -34,7 +34,7 @@
       "providerLabel": "Hermes profile: circe",
       "voice": "bright mezzo",
       "accent": "#d98255",
-      "asset": "/assets/witches/circe.svg"
+      "asset": "/assets/reference/coven-approved-reference.png"
     },
     {
       "id": "hecate",
@@ -46,7 +46,7 @@
       "providerLabel": "Hermes profile: hecate",
       "voice": "clear low soprano",
       "accent": "#93b87d",
-      "asset": "/assets/witches/hecate.svg"
+      "asset": "/assets/reference/coven-approved-reference.png"
     },
     {
       "id": "selene",
@@ -58,7 +58,7 @@
       "providerLabel": "Hermes profile: selene",
       "voice": "soft librarian",
       "accent": "#b6bdd6",
-      "asset": "/assets/witches/selene.svg"
+      "asset": "/assets/reference/coven-approved-reference.png"
     },
     {
       "id": "ophelia",
@@ -70,7 +70,7 @@
       "providerLabel": "Hermes profile: ophelia",
       "voice": "hushed silver",
       "accent": "#78a8c7",
-      "asset": "/assets/witches/ophelia.svg"
+      "asset": "/assets/reference/coven-approved-reference.png"
     }
   ]
 }

@@ -178,6 +178,13 @@ class CovenHandler(BaseHTTPRequestHandler):
         else:
             self._serve_static(path)
 
+    def do_HEAD(self) -> None:
+        if not self._check_origin():
+            self.send_response(HTTPStatus.FORBIDDEN)
+            self.end_headers()
+            return
+        self._serve_static(urlparse(self.path).path, send_body=False)
+
     def do_POST(self) -> None:
         if not self._check_origin():
             self._send_error_json(HTTPStatus.FORBIDDEN, "Host or Origin is not allowed.", code="origin_forbidden")
@@ -250,7 +257,7 @@ class CovenHandler(BaseHTTPRequestHandler):
         except (ValueError, ConfigError, json.JSONDecodeError) as exc:
             self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc), code="bad_request")
 
-    def _serve_static(self, path: str) -> None:
+    def _serve_static(self, path: str, *, send_body: bool = True) -> None:
         if path in {"/", "/index.html"} and not self._is_authenticated():
             rel = Path("auth.html")
         elif path == "/":
@@ -272,10 +279,16 @@ class CovenHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Security-Policy", CSP)
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Cache-Control", "no-store" if target.suffix == ".html" else "public, max-age=3600")
+        dynamic_suffixes = {".html", ".css", ".js", ".json"}
+        self.send_header("Cache-Control", "no-store" if target.suffix in dynamic_suffixes else "public, max-age=3600")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        if not send_body:
+            return
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            return
 
 
 def build_server(

@@ -75,9 +75,31 @@ class StoreTests(unittest.TestCase):
             store.append_message("morgana", "user", "demo note", namespace="demo")
             store.append_message("morgana", "user", "live note", namespace="live")
 
-            self.assertEqual(store.conversations("morgana", namespace="demo")[0]["text"], "demo note")
+            self.assertEqual(store.conversations("morgana", namespace="demo")[0]["text"], "Help me plan the next release.")
+            self.assertEqual(store.conversations("morgana", namespace="demo")[-1]["text"], "demo note")
             self.assertEqual(store.conversations("morgana", namespace="live")[0]["text"], "live note")
             self.assertEqual(store.snapshot(namespace="live")["tasks"], [])
+
+    def test_seeded_demo_tasks_are_static_reference_fixtures(self):
+        with TemporaryDirectory() as tmp:
+            store = self.make_store(tmp)
+            snapshot = store.snapshot(namespace="demo")
+            seeded = {task["title"]: task for task in snapshot["tasks"]}
+
+            self.assertEqual(
+                list(seeded),
+                ["Prepare project brief", "Review research notes", "Organize archive"],
+            )
+            self.assertEqual(seeded["Prepare project brief"]["status"], "running")
+            self.assertEqual(seeded["Review research notes"]["status"], "needs input")
+            self.assertEqual(seeded["Organize archive"]["status"], "completed")
+
+            state = store._read()
+            state["namespaces"]["demo"]["tasks"][0]["createdAt"] = "2020-01-01T00:00:00+00:00"
+            store._write(state)
+            advanced = store.snapshot(namespace="demo", advance_demo=True)
+
+            self.assertEqual(advanced["tasks"][0]["status"], "running")
 
     def test_runtime_sessions_are_namespaced_and_persisted(self):
         with TemporaryDirectory() as tmp:

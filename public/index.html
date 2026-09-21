@@ -11,7 +11,7 @@
       <header class="topbar" aria-label="Workspace status">
         <div class="brand-lockup">
           <h1>Coven</h1>
-          <span id="demoBadge" class="demo-badge" hidden>Demo</span>
+          <span id="demoBadge" class="demo-badge" hidden>Demo data</span>
         </div>
         <nav class="section-tabs" aria-label="Primary sections">
           <button class="tab-button" type="button" data-view="sanctuary" aria-selected="true">Sanctuary</button>
@@ -91,7 +91,7 @@
             </div>
           </div>
           <div class="sanctuary-stage">
-            <img src="/assets/sanctuary.svg" alt="Gothic coven room with six witch workstations" />
+            <div class="sanctuary-art" role="img" aria-label="Gothic coven room with six witch workstations"></div>
             <canvas id="sanctuaryCanvas" width="1400" height="720" aria-label="Playable sanctuary map"></canvas>
             <div id="hotspots" class="hotspots" aria-label="Witch stations"></div>
             <div id="interactionPrompt" class="interaction-prompt" hidden></div>
@@ -102,7 +102,7 @@
 
         <section class="dialogue-panel" aria-labelledby="dialogueTitle">
           <div class="character-frame">
-            <img id="portrait" src="/assets/witches/morgana.svg" alt="Morgana portrait" />
+            <div id="portrait" class="portrait-crop" data-witch="morgana" role="img" aria-label="Morgana portrait"></div>
             <div>
               <p id="witchTitle" class="eyebrow">High Witch / Coordinator</p>
               <h2 id="dialogueTitle">Morgana</h2>
@@ -135,15 +135,18 @@
               <span id="taskingState" class="inline-state">Live mode checks Hermes</span>
             </div>
             <label for="taskTitle">Task title</label>
-            <input id="taskTitle" type="text" placeholder="A bounded task with a concrete result" />
-            <label for="taskInstructions">Instructions</label>
-            <textarea id="taskInstructions" rows="4" placeholder="Describe the work, constraints, and verification evidence."></textarea>
-            <label for="taskPriority">Priority</label>
-            <select id="taskPriority">
-              <option value="normal">Normal</option>
-              <option value="high">High</option>
-              <option value="low">Low</option>
-            </select>
+            <input id="taskTitle" type="text" placeholder="Prepare a release plan" />
+            <details class="advanced-task-options">
+              <summary>Details</summary>
+              <label for="taskInstructions">Instructions</label>
+              <textarea id="taskInstructions" rows="4" placeholder="Describe constraints and verification evidence."></textarea>
+              <label for="taskPriority">Priority</label>
+              <select id="taskPriority">
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="low">Low</option>
+              </select>
+            </details>
             <button type="submit">Assign task</button>
           </form>
         </section>
@@ -156,18 +159,29 @@
             </div>
             <span id="taskCount" class="counter">0</span>
           </div>
-          <label for="taskFilter">Filter</label>
-          <select id="taskFilter">
-            <option value="all">All tasks</option>
-            <option value="active">Active</option>
-            <option value="needs">Needs input / approval</option>
-            <option value="completed">Completed</option>
-            <option value="failed">Failed</option>
-          </select>
+          <div class="journal-tabs" role="tablist" aria-label="Task filters">
+            <button class="journal-tab" type="button" data-filter="all" aria-selected="true">All</button>
+            <button class="journal-tab" type="button" data-filter="active" aria-selected="false">Active</button>
+            <button class="journal-tab" type="button" data-filter="completed" aria-selected="false">Done</button>
+          </div>
           <div id="taskList" class="task-list" aria-label="Task list"></div>
           <article id="taskDetail" class="task-detail" aria-live="polite">
             <p>Select a task to inspect its timeline, blockers, evidence, and recovery actions.</p>
           </article>
+          <footer class="journal-footer" aria-label="Presentation quick controls">
+            <button id="journalMuteToggle" class="control-tile" type="button">
+              <span>Sound</span>
+              <strong id="soundSummary">On</strong>
+            </button>
+            <button id="journalMotionToggle" class="control-tile" type="button">
+              <span>Motion</span>
+              <strong id="motionSummary">Tableau</strong>
+            </button>
+            <button id="journalFailureToggle" class="control-tile" type="button">
+              <span>Failure scenes</span>
+              <strong id="failureSummary">On</strong>
+            </button>
+          </footer>
         </section>
       </main>
     </div>

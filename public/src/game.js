@@ -143,27 +143,21 @@ export function createSanctuaryGame(canvas, options = {}) {
     for (const [id, station] of Object.entries(stations).sort((a, b) => a[1].y - b[1].y)) {
       const status = state.taskStates.get(id) || "available";
       ctx.save();
-      ctx.globalAlpha = id === state.selected ? 1 : 0.72;
-      ctx.fillStyle = status === "failed" ? "#c86b62" : status === "completed" ? "#93b87d" : "#d7b46a";
+      ctx.globalAlpha = id === state.selected ? 0.82 : 0.36;
+      ctx.fillStyle = status === "failed" ? "#c86b62" : status === "completed" ? "#93b87d" : status === "available" ? "#78a8c7" : "#d7b46a";
       ctx.beginPath();
-      ctx.ellipse(station.x, station.y + 56, 38, 12, 0, 0, Math.PI * 2);
+      ctx.ellipse(station.x, station.y + 56, id === state.selected ? 44 : 28, id === state.selected ? 12 : 8, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#111822";
       ctx.strokeStyle = id === state.selected ? "#d7b46a" : "#596274";
-      ctx.lineWidth = 4;
+      ctx.lineWidth = id === state.selected ? 3 : 1.5;
       ctx.beginPath();
-      ctx.roundRect(station.x - 30, station.y - 78, 60, 118, 24);
-      ctx.fill();
+      ctx.arc(station.x, station.y + 48, id === state.selected ? 34 : 22, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.fillStyle = "#ece7dc";
-      ctx.font = "24px serif";
-      ctx.textAlign = "center";
-      ctx.fillText(id.slice(0, 1).toUpperCase(), station.x, station.y - 12);
-      if (!state.lowEffects) {
+      if (!state.lowEffects && id === state.selected) {
         ctx.strokeStyle = "#78a8c7";
         ctx.globalAlpha *= 0.5;
         ctx.beginPath();
-        ctx.arc(station.x, station.y - 20, 38 + Math.sin(performance.now() / 500) * 3, 0, Math.PI * 2);
+        ctx.arc(station.x, station.y + 48, 42 + Math.sin(performance.now() / 500) * 3, 0, Math.PI * 2);
         ctx.stroke();
       }
       ctx.restore();

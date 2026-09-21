@@ -64,6 +64,8 @@ class CovenStore:
         }
 
     def _empty_namespace(self, name: str) -> dict[str, Any]:
+        if name == "demo":
+            return self._seed_demo_namespace()
         return {
             "name": name,
             "tasks": [],
@@ -71,6 +73,118 @@ class CovenStore:
             "runtimeSessions": {},
             "events": [],
             "cinematics": {"shownEventIds": [], "skippedEventIds": []},
+        }
+
+    def _seed_demo_namespace(self) -> dict[str, Any]:
+        now = utc_now()
+        return {
+            "name": "demo",
+            "tasks": [
+                self._demo_task(
+                    title="Prepare project brief",
+                    instructions="Summarize release goals, risks, verification evidence and next owner actions.",
+                    assignee="circe",
+                    status="running",
+                    priority="high",
+                    latest_update="Draft is ready for review.",
+                    timeline_kind="running",
+                    timeline_message="Circe is assembling the brief from the approved demo workspace.",
+                    now=now,
+                ),
+                self._demo_task(
+                    title="Review research notes",
+                    instructions="Check the gathered references, flag weak evidence and identify unanswered questions.",
+                    assignee="hecate",
+                    status="needs input",
+                    priority="normal",
+                    latest_update="Waiting for a source selection before review continues.",
+                    timeline_kind="needs_input",
+                    timeline_message="Hecate requested a decision on which notes should be treated as authoritative.",
+                    now=now,
+                ),
+                self._demo_task(
+                    title="Organize archive",
+                    instructions="Create the durable summary and index the accepted project decisions.",
+                    assignee="selene",
+                    status="completed",
+                    priority="normal",
+                    latest_update="Archive summary is complete.",
+                    timeline_kind="completed",
+                    timeline_message="Selene completed the archive index and summary.",
+                    now=now,
+                    evidence=["Demo archive summary recorded in the local fixture state."],
+                    result="Demo archive organized and ready to inspect.",
+                ),
+            ],
+            "conversations": {
+                "morgana": [
+                    {
+                        "id": f"msg-{uuid.uuid4().hex}",
+                        "author": "user",
+                        "text": "Help me plan the next release.",
+                        "timestamp": now,
+                    },
+                    {
+                        "id": f"msg-{uuid.uuid4().hex}",
+                        "author": "morgana",
+                        "text": "Let's define the goal, the steps, and the evidence of success.",
+                        "timestamp": now,
+                    },
+                ]
+            },
+            "runtimeSessions": {},
+            "events": [],
+            "cinematics": {"shownEventIds": [], "skippedEventIds": []},
+        }
+
+    def _demo_task(
+        self,
+        *,
+        title: str,
+        instructions: str,
+        assignee: str,
+        status: str,
+        priority: str,
+        latest_update: str,
+        timeline_kind: str,
+        timeline_message: str,
+        now: str,
+        evidence: list[str] | None = None,
+        result: str | None = None,
+    ) -> dict[str, Any]:
+        task_id = f"task-demo-{validate_identifier(title.lower().replace(' ', '-'), field='demo task id')[:36]}"
+        attempt_id = f"{task_id}-attempt-1"
+        return {
+            "id": task_id,
+            "attemptId": attempt_id,
+            "parentTaskId": None,
+            "title": title,
+            "instructions": instructions,
+            "assignee": assignee,
+            "status": status,
+            "priority": priority,
+            "mode": "demo",
+            "createdAt": now,
+            "updatedAt": now,
+            "startedAt": now if status in {"running", "needs input", "completed"} else None,
+            "completedAt": now if status == "completed" else None,
+            "latestUpdate": latest_update,
+            "dependencies": [],
+            "blockers": ["Awaiting user input in the demo fixture."] if status == "needs input" else [],
+            "evidence": evidence or [],
+            "result": result,
+            "lastSuccessfulStep": "Demo fixture seeded and persisted.",
+            "retryPolicy": {"maxRetries": 0, "attempt": 1, "exhausted": False},
+            "demoOutcome": "hold",
+            "fixtureStatic": True,
+            "timeline": [
+                {
+                    "id": f"evt-{uuid.uuid4().hex[:10]}",
+                    "kind": timeline_kind,
+                    "message": timeline_message,
+                    "timestamp": now,
+                }
+            ],
         }
 
     def _migrate_state(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -348,6 +462,8 @@ class CovenStore:
         changed = False
         now_dt = datetime.now(timezone.utc)
         for task in state["tasks"]:
+            if task.get("fixtureStatic"):
+                continue
             if task.get("mode") != "demo" or task.get("status") not in {"queued", "running"}:
                 continue
             created = datetime.fromisoformat(task["createdAt"])
