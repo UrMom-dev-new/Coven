@@ -22,6 +22,8 @@ class DesktopStaticTests(unittest.TestCase):
         self.assertIn("sanctuary-art", source)
         self.assertIn("Prepare project brief", source)
         self.assertIn("Cache-Control", source)
+        self.assertIn('getattr(sys, "frozen", False)', source)
+        self.assertIn("os._exit(code)", source)
 
     def test_windows_build_runs_packaged_executable_self_test(self):
         build_script = (ROOT / "scripts" / "build-windows.ps1").read_text(encoding="utf-8")

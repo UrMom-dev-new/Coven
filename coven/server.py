@@ -47,6 +47,8 @@ def json_bytes(payload: object) -> bytes:
 
 
 class CovenHTTPServer(ThreadingHTTPServer):
+    daemon_threads = True
+
     store: CovenStore
     auth: AuthManager
     runtime: RuntimeInspector

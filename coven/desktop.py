@@ -270,7 +270,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.self_test:
-            return run_self_test(args)
+            code = run_self_test(args)
+            if getattr(sys, "frozen", False):
+                os._exit(code)
+            return code
         return run_desktop(args)
     except Exception as exc:
         print(f"Coven startup failed: {exc}", file=sys.stderr)
