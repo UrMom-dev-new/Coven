@@ -146,6 +146,16 @@
                 <option value="high">High</option>
                 <option value="low">Low</option>
               </select>
+              <label for="routeMode">Runtime route</label>
+              <select id="routeMode">
+                <option value="auto">Auto</option>
+                <option value="local">Local only</option>
+                <option value="api">API</option>
+              </select>
+              <label for="taskProvider">Provider override</label>
+              <input id="taskProvider" type="text" autocomplete="off" placeholder="Optional Hermes provider slug" />
+              <label for="taskModel">Model override</label>
+              <input id="taskModel" type="text" autocomplete="off" placeholder="Optional model id" />
             </details>
             <button type="submit">Assign task</button>
           </form>

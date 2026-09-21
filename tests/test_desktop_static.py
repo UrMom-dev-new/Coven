@@ -29,6 +29,7 @@ class DesktopStaticTests(unittest.TestCase):
 
     def test_windows_build_runs_packaged_executable_self_test(self):
         build_script = (ROOT / "scripts" / "build-windows.ps1").read_text(encoding="utf-8")
+        installer_script = (ROOT / "scripts" / "build-installer.ps1").read_text(encoding="utf-8")
         smoke_script = (ROOT / "scripts" / "smoke-windows.ps1").read_text(encoding="utf-8")
         workflow = (ROOT / ".github" / "workflows" / "windows-build.yml").read_text(encoding="utf-8")
         launcher = (ROOT / "scripts" / "start-coven.ps1").read_text(encoding="utf-8")
@@ -40,6 +41,9 @@ class DesktopStaticTests(unittest.TestCase):
         self.assertIn("smoke-windows.ps1", workflow)
         self.assertIn("self-test failed", smoke_script)
         self.assertIn("$SelfTest", launcher)
+        self.assertIn("ISCC.exe", installer_script)
+        self.assertIn("Build installer artifact", workflow)
+        self.assertIn("Coven-Windows-Installer", workflow)
 
     def test_pyinstaller_spec_collects_webview_backend_modules(self):
         spec = (ROOT / "packaging" / "Coven.spec").read_text(encoding="utf-8")

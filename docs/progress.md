@@ -45,7 +45,7 @@ Implemented in this pass:
 - LocalAppData path helpers for state, runtime and WebView2 user data.
 - Reproducible PyInstaller spec and Windows build script.
 - Inno Setup installer skeleton and Windows CI build workflow.
-- Demo/Hermes adapter boundary. Live chat uses documented Hermes session API when configured; live task lifecycle remains disabled until verified.
+- Demo/Hermes adapter boundary. At that milestone live chat used the documented Hermes session API when configured, and the live task lifecycle was still disabled; the 2026-09-21 continuation below supersedes that task status.
 - First-run status/onboarding panel inside the app.
 - Canvas 2D sanctuary loop with movable candle familiar and station interaction.
 - Quest journal filtering.
@@ -55,7 +55,7 @@ Implemented in this pass:
 
 Tested in this environment:
 
-- `python3 -m unittest discover -s tests` ran 24 tests.
+- `python3 -m unittest discover -s tests` ran 24 tests at that milestone.
 - `python3 -m compileall coven tests`.
 - `node --check` for all checked-in frontend modules.
 - Authenticated local API smoke on port 8892: session, status, task creation, voice status and terminal-failure event.
@@ -68,3 +68,28 @@ Unverified gates:
 - Voice recording/transcription/speech in WebView2.
 - Installer installation/upgrade/uninstall behavior.
 - Dell performance targets.
+
+## 2026-09-21 Production Hardening Continuation
+
+Implemented:
+
+- Live Hermes task dispatch through the documented Runs API when `/v1/capabilities` advertises `run_submission` and `run_status`.
+- Stop, approval and linked retry controls for live task records.
+- Durable run/session/attempt/idempotency/runtime/usage/artifact/timeline state for live tasks.
+- Authenticated runtime readiness checks for health, capabilities, detailed health and model options.
+- Separate user-input and assistant-output limits, explicit message delivery states, and timeout-as-uncertain chat behavior.
+- Quest Journal runtime detail display and per-witch typed/voice draft isolation.
+- Windows installer build script plus CI upload of an unsigned Inno Setup installer artifact.
+
+Tested:
+
+- `python3 -m unittest discover -s tests` ran 45 tests.
+- `python3 -m compileall coven tests`.
+- Bundled Node `--check` passed for all frontend modules.
+- `python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-final.log` passed on this macOS source tree after loopback permission was granted.
+
+Unverified gates:
+
+- Live Hermes execution, served-provider evidence and persistent SSE event streaming.
+- Windows/WebView2 visual interaction, PyInstaller artifact generation, installer installation/upgrade/uninstall and signing.
+- Microphone permissions, local/API transcription, installed Windows voices and Dell performance targets.

@@ -21,6 +21,14 @@ from .configuration import (
 from .events import event_to_dict, normalize_runtime_event, should_trigger_failure_cinematic
 
 
+USER_MESSAGE_LIMIT = 4_000
+ASSISTANT_MESSAGE_LIMIT = 40_000
+TRANSPORT_TEXT_LIMIT = 64_000
+TASK_EVENT_LIMIT = 80
+TERMINAL_TASK_STATUSES = {"completed", "failed", "cancelled", "interrupted"}
+ACTIVE_TASK_STATUSES = {"queued", "running", "waiting_for_approval", "stopping", "unknown", "disconnected"}
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -49,7 +57,7 @@ class CovenStore:
 
     def _new_state(self) -> dict[str, Any]:
         return {
-            "version": 2,
+            "version": 3,
             "createdAt": utc_now(),
             "preferences": {
                 "cinematicsEnabled": True,
@@ -188,17 +196,31 @@ class CovenStore:
         }
 
     def _migrate_state(self, state: dict[str, Any]) -> dict[str, Any]:
-        if state.get("version") == 2 and isinstance(state.get("namespaces"), dict):
+        if state.get("version") in {2, 3} and isinstance(state.get("namespaces"), dict):
             changed = False
             for namespace in ("demo", "live"):
                 if namespace not in state["namespaces"]:
                     state["namespaces"][namespace] = self._empty_namespace(namespace)
                     changed = True
-                if "runtimeSessions" not in state["namespaces"][namespace]:
-                    state["namespaces"][namespace]["runtimeSessions"] = {}
-                    changed = True
+                scope = state["namespaces"][namespace]
+                defaults = self._empty_namespace(namespace)
+                for key in ("tasks", "conversations", "runtimeSessions", "events", "cinematics"):
+                    if key not in scope:
+                        scope[key] = deepcopy(defaults[key])
+                        changed = True
+                for task in scope.get("tasks", []):
+                    changed = self._ensure_task_shape(task, namespace=namespace) or changed
+                for messages in scope.get("conversations", {}).values():
+                    if isinstance(messages, list):
+                        for message in messages:
+                            if isinstance(message, dict) and "delivery" not in message:
+                                message["delivery"] = {"state": "delivered"}
+                                changed = True
             if "preferences" not in state:
                 state["preferences"] = self._preferences_from(state)
+                changed = True
+            if state.get("version") != 3:
+                state["version"] = 3
                 changed = True
             return deepcopy(state) if changed else state
 
@@ -212,6 +234,34 @@ class CovenStore:
         migrated["migratedFromVersion"] = state.get("version", "unknown")
         migrated["migratedAt"] = utc_now()
         return migrated
+
+    def _ensure_task_shape(self, task: dict[str, Any], *, namespace: str) -> bool:
+        changed = False
+        if "artifacts" not in task:
+            task["artifacts"] = []
+            changed = True
+        if "usage" not in task:
+            task["usage"] = None
+            changed = True
+        if "runtime" not in task:
+            task["runtime"] = {}
+            changed = True
+        if "requestedRuntime" not in task:
+            task["requestedRuntime"] = {}
+            changed = True
+        if "approval" not in task:
+            task["approval"] = {"state": "none"}
+            changed = True
+        if namespace == "live" or task.get("mode") == "live":
+            if "hermes" not in task:
+                task["hermes"] = {
+                    "runId": None,
+                    "sessionId": None,
+                    "idempotencyKey": None,
+                    "lastReconciledAt": None,
+                }
+                changed = True
+        return changed
 
     def _preferences_from(self, state: dict[str, Any]) -> dict[str, Any]:
         raw = state.get("settings", state.get("preferences", {}))
@@ -289,25 +339,65 @@ class CovenStore:
             self._write(state)
             return deepcopy(record)
 
-    def append_message(self, witch_id: str, author: str, text: str, *, namespace: str) -> list[dict[str, Any]]:
+    def append_message(
+        self,
+        witch_id: str,
+        author: str,
+        text: str,
+        *,
+        namespace: str,
+        status: str = "delivered",
+        max_length: int | None = None,
+        message_id: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         witch_id = self._profile_id(witch_id)
         namespace = self._namespace_name(namespace)
         if author != "user":
             author = self._profile_id(author)
-        text = self._bounded_text(text, "Message", max_length=8000).strip()
+        if status not in {"queued", "sending", "delivered", "failed", "uncertain"}:
+            raise ValueError("Message delivery status is invalid.")
+        limit = max_length or (USER_MESSAGE_LIMIT if author == "user" else ASSISTANT_MESSAGE_LIMIT)
+        text = self._bounded_text(text, "Message", max_length=limit).strip()
         if not text:
             raise ValueError("Message cannot be empty.")
+        message_id = message_id or f"msg-{uuid.uuid4().hex}"
         with self._lock:
             state = self._read()
             thread = state["namespaces"][namespace]["conversations"].setdefault(witch_id, [])
             thread.append(
                 {
-                    "id": f"msg-{uuid.uuid4().hex}",
+                    "id": message_id,
                     "author": author,
                     "text": text,
                     "timestamp": utc_now(),
+                    "delivery": {"state": status, **(details or {})},
                 }
             )
+            self._write(state)
+            return deepcopy(thread)
+
+    def update_message_delivery(
+        self,
+        witch_id: str,
+        message_id: str,
+        *,
+        namespace: str,
+        status: str,
+        details: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        witch_id = self._profile_id(witch_id)
+        namespace = self._namespace_name(namespace)
+        if status not in {"queued", "sending", "delivered", "failed", "uncertain"}:
+            raise ValueError("Message delivery status is invalid.")
+        with self._lock:
+            state = self._read()
+            thread = state["namespaces"][namespace]["conversations"].setdefault(witch_id, [])
+            message = next((item for item in thread if item.get("id") == message_id), None)
+            if message is None:
+                raise KeyError(message_id)
+            message["delivery"] = {"state": status, **(details or {})}
+            message["updatedAt"] = utc_now()
             self._write(state)
             return deepcopy(thread)
 
@@ -361,6 +451,262 @@ class CovenStore:
             self._write(state)
             return deepcopy(task)
 
+    def create_live_task(
+        self,
+        *,
+        assignee: str,
+        title: str,
+        instructions: str,
+        priority: str,
+        idempotency_key: str,
+        session_id: str | None,
+        requested_runtime: dict[str, Any],
+        parent_task_id: str | None = None,
+        attempt: int = 1,
+    ) -> dict[str, Any]:
+        assignee = self._profile_id(assignee)
+        priority = validate_priority(priority)
+        title = self._bounded_text(title, "Task title", max_length=160).strip()
+        instructions = self._bounded_text(instructions, "Task instructions", max_length=16_000).strip()
+        idempotency_key = self._bounded_text(idempotency_key, "Idempotency key", max_length=255).strip()
+        if not title:
+            raise ValueError("Task title is required.")
+        if not idempotency_key:
+            raise ValueError("Idempotency key is required.")
+
+        now = utc_now()
+        task_id = f"task-{uuid.uuid4().hex[:12]}"
+        task = {
+            "id": task_id,
+            "attemptId": f"{task_id}-attempt-{attempt}",
+            "parentTaskId": parent_task_id,
+            "title": title,
+            "instructions": instructions,
+            "assignee": assignee,
+            "status": "queued",
+            "priority": priority,
+            "mode": "live",
+            "createdAt": now,
+            "updatedAt": now,
+            "startedAt": None,
+            "completedAt": None,
+            "latestUpdate": "Queued for Hermes run submission.",
+            "dependencies": [],
+            "blockers": [],
+            "evidence": [],
+            "result": None,
+            "lastSuccessfulStep": "Task accepted locally before remote dispatch.",
+            "retryPolicy": {"maxRetries": 0, "attempt": attempt, "exhausted": False},
+            "requestedRuntime": deepcopy(requested_runtime),
+            "runtime": {},
+            "usage": None,
+            "approval": {"state": "none"},
+            "artifacts": [],
+            "hermes": {
+                "runId": None,
+                "sessionId": session_id,
+                "idempotencyKey": idempotency_key,
+                "lastReconciledAt": None,
+            },
+            "timeline": [
+                {
+                    "id": f"evt-{uuid.uuid4().hex[:10]}",
+                    "kind": "queued",
+                    "message": "Task was persisted locally before Hermes dispatch.",
+                    "timestamp": now,
+                }
+            ],
+        }
+        with self._lock:
+            state = self._read()
+            state["namespaces"]["live"]["tasks"].insert(0, task)
+            self._write(state)
+            return deepcopy(task)
+
+    def task(self, task_id: str, *, namespace: str) -> dict[str, Any]:
+        namespace = self._namespace_name(namespace)
+        with self._lock:
+            state = self._read()
+            task = next((item for item in state["namespaces"][namespace]["tasks"] if item.get("id") == task_id), None)
+            if task is None:
+                raise KeyError(task_id)
+            return deepcopy(task)
+
+    def live_reconcile_candidates(self) -> list[dict[str, Any]]:
+        with self._lock:
+            state = self._read()
+            tasks = state["namespaces"]["live"]["tasks"]
+            return deepcopy(
+                [
+                    task
+                    for task in tasks
+                    if task.get("mode") == "live"
+                    and task.get("hermes", {}).get("runId")
+                    and task.get("status") not in TERMINAL_TASK_STATUSES
+                ]
+            )
+
+    def mark_task_dispatch_uncertain(self, task_id: str, *, reason: str) -> dict[str, Any]:
+        return self.update_live_task(
+            task_id,
+            status="unknown",
+            latest_update=f"Remote submission outcome is uncertain: {reason}",
+            timeline_kind="unknown",
+            timeline_message=f"Remote submission outcome is uncertain: {reason}",
+        )
+
+    def record_live_submission(
+        self,
+        task_id: str,
+        *,
+        run_id: str,
+        remote_status: str,
+        replayed: bool = False,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        status = self._map_runtime_status(remote_status)
+        return self.update_live_task(
+            task_id,
+            status=status,
+            hermes_updates={"runId": run_id, "sessionId": session_id, "lastReconciledAt": utc_now()},
+            latest_update=f"Hermes run {run_id} accepted with status {remote_status}.",
+            timeline_kind="submission_replayed" if replayed else "submitted",
+            timeline_message=(
+                f"Idempotent submission reused Hermes run {run_id}."
+                if replayed
+                else f"Hermes accepted run {run_id}."
+            ),
+        )
+
+    def update_live_task_from_run(self, task_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        remote_status = str(payload.get("status") or "unknown")
+        status = self._map_runtime_status(remote_status)
+        output = payload.get("output")
+        latest = f"Hermes reports {remote_status}."
+        if isinstance(output, str) and output.strip() and status in TERMINAL_TASK_STATUSES:
+            latest = "Hermes returned a terminal result."
+        runtime = payload.get("runtime") if isinstance(payload.get("runtime"), dict) else {}
+        usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else None
+        approval = payload.get("approval") if isinstance(payload.get("approval"), dict) else None
+        artifacts = payload.get("artifacts") if isinstance(payload.get("artifacts"), list) else None
+        timeline_events = self._extract_run_timeline(payload)
+        return self.update_live_task(
+            task_id,
+            status=status,
+            latest_update=latest,
+            result=output if isinstance(output, str) and status == "completed" else None,
+            blockers=[str(payload.get("error"))] if status in {"failed", "interrupted"} and payload.get("error") else None,
+            evidence=[f"Remote run status polled from Hermes at {utc_now()}."],
+            runtime=runtime,
+            usage=usage,
+            approval=approval,
+            artifacts=artifacts,
+            hermes_updates={
+                "runId": str(payload.get("run_id") or payload.get("id") or ""),
+                "sessionId": str(payload.get("session_id") or ""),
+                "lastReconciledAt": utc_now(),
+            },
+            timeline_events=timeline_events,
+            timeline_kind=status,
+            timeline_message=latest,
+        )
+
+    def update_live_task(
+        self,
+        task_id: str,
+        *,
+        status: str | None = None,
+        latest_update: str | None = None,
+        result: str | None = None,
+        blockers: list[str] | None = None,
+        evidence: list[str] | None = None,
+        runtime: dict[str, Any] | None = None,
+        usage: dict[str, Any] | None = None,
+        approval: dict[str, Any] | None = None,
+        artifacts: list[Any] | None = None,
+        hermes_updates: dict[str, Any] | None = None,
+        timeline_events: list[dict[str, str]] | None = None,
+        timeline_kind: str | None = None,
+        timeline_message: str | None = None,
+    ) -> dict[str, Any]:
+        if status is not None and status not in TERMINAL_TASK_STATUSES | ACTIVE_TASK_STATUSES | {"needs_input"}:
+            raise ValueError(f"Unsupported task status: {status}")
+        with self._lock:
+            state = self._read()
+            tasks = state["namespaces"]["live"]["tasks"]
+            task = next((item for item in tasks if item.get("id") == task_id), None)
+            if task is None:
+                raise KeyError(task_id)
+            now = utc_now()
+            previous_status = task.get("status")
+            if status is not None:
+                task["status"] = status
+                if status in {"running", "waiting_for_approval"} and not task.get("startedAt"):
+                    task["startedAt"] = now
+                if status in TERMINAL_TASK_STATUSES and not task.get("completedAt"):
+                    task["completedAt"] = now
+            if latest_update is not None:
+                task["latestUpdate"] = self._bounded_text(latest_update, "Latest update", max_length=600)
+            if result is not None:
+                task["result"] = self._bounded_text(result, "Task result", max_length=TRANSPORT_TEXT_LIMIT)
+            if blockers is not None:
+                task["blockers"] = [self._bounded_text(item, "Blocker", max_length=600) for item in blockers]
+            if evidence:
+                existing = list(task.get("evidence") or [])
+                for item in evidence:
+                    text = self._bounded_text(item, "Evidence", max_length=600)
+                    if text not in existing:
+                        existing.append(text)
+                task["evidence"] = existing[-20:]
+            if runtime is not None:
+                task["runtime"] = deepcopy(runtime)
+            if usage is not None:
+                task["usage"] = deepcopy(usage)
+            if approval is not None:
+                task["approval"] = deepcopy(approval)
+            if artifacts is not None:
+                task["artifacts"] = deepcopy(artifacts[:20])
+            if hermes_updates:
+                hermes = task.setdefault("hermes", {})
+                for key, value in hermes_updates.items():
+                    if value not in {None, ""}:
+                        hermes[key] = value
+            if timeline_events:
+                timeline = task.setdefault("timeline", [])
+                existing_ids = {item.get("id") for item in timeline if isinstance(item, dict)}
+                for event in timeline_events:
+                    event_id = event.get("id") or f"evt-{uuid.uuid4().hex[:10]}"
+                    if event_id in existing_ids:
+                        continue
+                    timeline.append(
+                        {
+                            "id": event_id,
+                            "kind": self._bounded_text(event.get("kind", "runtime"), "Timeline event kind", max_length=80),
+                            "message": self._bounded_text(event.get("message", "Runtime event recorded."), "Timeline message", max_length=800),
+                            "timestamp": event.get("timestamp") or now,
+                        }
+                    )
+                    existing_ids.add(event_id)
+                task["timeline"] = timeline[-TASK_EVENT_LIMIT:]
+            if timeline_kind and timeline_message:
+                timeline = task.setdefault("timeline", [])
+                if previous_status != status or not timeline or timeline[-1].get("message") != timeline_message:
+                    timeline.append(
+                        {
+                            "id": f"evt-{uuid.uuid4().hex[:10]}",
+                            "kind": timeline_kind,
+                            "message": self._bounded_text(timeline_message, "Timeline message", max_length=800),
+                            "timestamp": now,
+                        }
+                    )
+                    task["timeline"] = timeline[-TASK_EVENT_LIMIT:]
+            task["updatedAt"] = now
+            if task.get("status") == "failed":
+                task.setdefault("retryPolicy", {})["exhausted"] = True
+                self._record_terminal_failure_event(state["namespaces"]["live"], task)
+            self._write(state)
+            return deepcopy(task)
+
     def retry_task(self, task_id: str, *, namespace: str) -> dict[str, Any]:
         namespace = self._namespace_name(namespace)
         with self._lock:
@@ -398,6 +744,54 @@ class CovenStore:
             tasks.insert(0, new_task)
             self._write(state)
             return deepcopy(new_task)
+
+    def _map_runtime_status(self, status: str) -> str:
+        normalized = str(status or "unknown").strip().lower().replace("-", "_")
+        aliases = {
+            "started": "running",
+            "in_progress": "running",
+            "waiting": "waiting_for_approval",
+            "needs_input": "waiting_for_approval",
+            "needs approval": "waiting_for_approval",
+        }
+        mapped = aliases.get(normalized, normalized)
+        if mapped in TERMINAL_TASK_STATUSES | ACTIVE_TASK_STATUSES | {"needs_input"}:
+            return mapped
+        return "unknown"
+
+    def _extract_run_timeline(self, payload: dict[str, Any]) -> list[dict[str, str]]:
+        raw_events = payload.get("events")
+        if not isinstance(raw_events, list):
+            return []
+        timeline: list[dict[str, str]] = []
+        for raw in raw_events[-TASK_EVENT_LIMIT:]:
+            if not isinstance(raw, dict):
+                continue
+            kind = str(raw.get("type") or raw.get("event") or raw.get("kind") or "runtime")
+            message = self._runtime_event_message(kind, raw)
+            timeline.append(
+                {
+                    "id": str(raw.get("id") or raw.get("event_id") or raw.get("eventId") or f"remote-{uuid.uuid4().hex[:10]}"),
+                    "kind": kind,
+                    "message": message,
+                    "timestamp": str(raw.get("timestamp") or raw.get("created_at") or raw.get("createdAt") or utc_now()),
+                }
+            )
+        return timeline
+
+    def _runtime_event_message(self, kind: str, raw: dict[str, Any]) -> str:
+        for key in ("message", "summary", "text", "content"):
+            value = raw.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        tool = raw.get("tool") or raw.get("tool_name") or raw.get("toolName") or raw.get("name")
+        if isinstance(tool, str) and tool.strip():
+            if kind.endswith("started"):
+                return f"{tool.strip()} started."
+            if kind.endswith("completed"):
+                return f"{tool.strip()} completed."
+            return f"{tool.strip()} event: {kind}."
+        return f"Hermes event: {kind}."
 
     def pending_failure_events(self, *, namespace: str) -> list[dict[str, Any]]:
         namespace = self._namespace_name(namespace)
@@ -543,6 +937,27 @@ class CovenStore:
                     "timestamp": now,
                 }
             )
+
+    def _record_terminal_failure_event(self, scope: dict[str, Any], task: dict[str, Any]) -> None:
+        event_id = f"terminal-failure:{task['id']}:{task['attemptId']}"
+        if any(event.get("id") == event_id for event in scope["events"]):
+            return
+        scope["events"].append(
+            {
+                "id": event_id,
+                "taskId": task["id"],
+                "attemptId": task["attemptId"],
+                "title": task["title"],
+                "assignee": task["assignee"],
+                "status": "failed",
+                "outcomeKind": "terminal_failure",
+                "terminal": True,
+                "retryPolicyExhausted": bool(task.get("retryPolicy", {}).get("exhausted")),
+                "error": "; ".join(task.get("blockers") or []) or "Hermes reported a terminal failure.",
+                "lastSuccessfulStep": task.get("lastSuccessfulStep") or "Remote run was accepted.",
+                "timestamp": utc_now(),
+            }
+        )
 
     def _namespace_name(self, namespace: str) -> str:
         if namespace not in {"demo", "live"}:

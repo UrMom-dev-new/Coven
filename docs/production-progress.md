@@ -2,9 +2,33 @@
 
 Last updated: 2026-09-21
 
-Base commit for this continuation pass: `59ef4d3`
+Base commit for this continuation pass: `e0df4ffe1fb528d7e977bf5af5cd218b33f0f0bd`
 
-## Implemented In This Pass
+## Implemented In This Continuation Pass
+
+- Implemented the live Hermes Runs API task path behind capability checks:
+  - `POST /v1/runs` submission with `Idempotency-Key`
+  - `GET /v1/runs/{run_id}` reconciliation on task refresh
+  - `POST /v1/runs/{run_id}/stop`
+  - `POST /v1/runs/{run_id}/approval`
+  - linked retry attempts only for confirmed failed live tasks
+- Added durable live task fields for Hermes run/session identity, attempt ID, parent task, idempotency key, requested runtime, served runtime, usage, approval state, artifact references, bounded timeline events and terminal failure events.
+- Replaced the `hermes --version` readiness shortcut with authenticated API checks for `/health`, `/v1/capabilities`, `/health/detailed`, and `/api/model/options`.
+- Added explicit Local/API/Auto task routing fields in the UI and routed the selected provider/model into Hermes requests when configured.
+- Added witch role instructions to live run submission through the supported request body.
+- Added chat reliability safeguards:
+  - user messages validate type and length before remote dispatch
+  - outgoing messages persist delivery state
+  - timeouts/connection errors are marked `uncertain`
+  - empty/unrecognized assistant payloads fail instead of becoming blank successes
+  - long assistant responses use a separate retained-output limit
+- Expanded the Quest Journal detail view with requested/served runtime, Hermes run ID, usage, idempotency recovery note, artifact references, stop, approval and linked retry controls.
+- Preserved typed and spoken drafts per witch so context switches do not mix transcripts.
+- Bound speech recognition results to the witch that started recording and labeled browser speech APIs as exposed but unverified rather than production-ready.
+- Added a Windows installer build script and updated the Windows workflow to compile and upload an unsigned Inno Setup installer artifact after the portable executable smoke gate.
+- Updated Hermes compatibility and acceptance docs to cite the documented Runs API and mark live/Windows-only proof gates honestly.
+
+## Previously Implemented In The Visual/Desktop Pass
 
 - Preserved the approved visual reference at `docs/design/coven-approved-reference.png`.
 - Reworked the main app chrome toward the approved Windows composition:
@@ -36,7 +60,7 @@ Base commit for this continuation pass: `59ef4d3`
 
 ## Verified
 
-- `python3 -m unittest discover -s tests` ran 33 tests and passed.
+- `python3 -m unittest discover -s tests` ran 45 tests and passed.
 - `python3 -m compileall coven tests` passed.
 - `/Users/nefarioususer/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check public/src/app.js` passed.
 - `/Users/nefarioususer/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check public/src/game.js` passed.
@@ -65,17 +89,19 @@ Base commit for this continuation pass: `59ef4d3`
   - `HEAD /assets/reference/coven-approved-reference.png` returned `200 image/png` with cacheable image headers
   - `HEAD /styles.css` returned `200 text/css` with `Cache-Control: no-store`
 - Headless desktop self-test passed from the source tree:
-  - `python3 -m coven.desktop --self-test --data-dir .coven-data/desktop-self-test --auth-token desktop-self-test-token`
+  - `python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-final.log`
   - local desktop service booted
   - session bootstrap returned `201`
   - authenticated app shell returned approved-reference UI markers
   - seeded demo tasks were available
   - approved reference PNG and CSS `HEAD` checks passed
+- New targeted unit coverage includes Hermes empty chat responses, long assistant output persistence, pre-dispatch validation, uncertain delivery state, live run submission/reconciliation shape, runtime API readiness gates, live terminal failure event de-duplication and installer workflow markers.
 
 ## Still Blocked Or Incomplete
 
 - Windows/WebView2 runtime rendering and high-DPI visual acceptance have not been verified in this macOS workspace.
-- Live Hermes task creation, retry, cancellation, approvals and artifact reconciliation remain blocked on an authoritative installed Hermes task/run API contract.
-- Voice is implemented only through browser/WebView speech APIs when available; microphone permission, Windows/WebView2 speech recognition and hardware transcription quality remain unverified here.
-- PyInstaller bundle, Inno Setup installer, update flow, signing and Windows CI artifacts remain unverified in this environment. The Windows workflow now includes a packaged executable self-test, but it has not been executed from this macOS workspace.
+- Live Hermes task creation, retry, cancellation, approvals and artifact reconciliation are implemented against the documented Runs API and deterministic mocks, but live proof remains blocked because Hermes, provider credentials and an authorized disposable workspace were not available here.
+- Persistent SSE consumption from `/v1/runs/{run_id}/events` still requires live runtime validation before production acceptance.
+- Voice is implemented through browser/WebView speech APIs when exposed; microphone permission, Windows/WebView2 speech recognition, local/API transcription, installed voices and hardware transcription quality remain unverified here.
+- PyInstaller bundle, Inno Setup installer, update flow, signing and Windows CI artifacts remain unverified in this environment. The Windows workflow now includes a packaged executable self-test and installer compile/upload, but that workflow has not been executed from this macOS workspace.
 - Full production acceptance requires a Windows machine with WebView2, Hermes, microphone access, provider credentials and the target Dell-class hardware.

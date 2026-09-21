@@ -27,21 +27,23 @@ Current tests cover:
 - Unknown failed events do not trigger Ophelia's scene.
 - One-time auth bootstrap, session cookies and wrong-origin rejection.
 - Demo/live namespace isolation and v1 state migration with backup.
+- Live task persistence for Hermes run/session IDs, idempotency keys, requested/served runtime, usage, artifacts and bounded timeline events.
 - Seeded approved-reference demo task fixtures that stay static during demo advancement.
 - Persisted presentation preference validation.
 - Static frontend checks for no dynamic `innerHTML` in the app controller and explicit `[hidden]` overlay CSS.
-- Demo and Hermes adapter boundary behavior.
+- Demo and Hermes adapter behavior, including empty-response rejection, long-output persistence, pre-dispatch validation, uncertain delivery recovery, live Runs API submission/reconciliation shape, and session reuse.
+- Authenticated Hermes API readiness probing through capabilities rather than CLI-version readiness.
 - Asset manifest/package scaffold existence and static server cache/HEAD behavior.
 - Canvas sanctuary module visibility pause and station interaction event wiring.
 - Desktop unlock visibility after the pywebview API-ready event.
-- Desktop bridge one-time token behavior, packaged self-test source markers, Windows build self-test hook and PyInstaller WebView backend collection.
+- Desktop bridge one-time token behavior, packaged self-test source markers, Windows build self-test hook, installer artifact workflow hook and PyInstaller WebView backend collection.
 - Voice status boundary.
 
 Most recent run in this environment:
 
 ```text
 python3 -m unittest discover -s tests
-Ran 33 tests in 0.021s - OK
+Ran 45 tests in 0.040s - OK
 
 /Users/nefarioususer/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check public/src/app.js / auth.js / api.js / dom.js / game.js / presentation.js
 python3 -m compileall coven tests
@@ -107,7 +109,7 @@ HEAD /styles.css -> 200 text/css, Cache-Control: no-store
 Desktop self-test smoke performed on macOS development host after the Windows packaging pass:
 
 ```text
-python3 -m coven.desktop --self-test --data-dir .coven-data/desktop-self-test --auth-token desktop-self-test-token
+python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-final.log
 GET /api/health -> 200
 POST /api/auth/session -> 201
 GET / -> 200
@@ -115,14 +117,12 @@ GET /api/tasks -> 200
 HEAD /assets/reference/coven-approved-reference.png -> 200
 HEAD /styles.css -> 200
 Coven desktop self-test passed.
-
-python3 -m coven.desktop --self-test --auth-token desktop-temp-self-test-token
-Default temporary data directory self-test also passed.
 ```
 
 ## Not Verified In This Environment
 
-- Live Hermes dispatch and event streaming.
+- Live Hermes execution against an installed API server, including real provider/model evidence.
+- Persistent SSE event streaming from `/v1/runs/{run_id}/events`.
 - Windows launcher on the Dell target.
 - 1366x768 and 200 percent browser zoom on the target display.
 - Ollama local model smoke test, because the local service did not answer from this sandbox.
@@ -130,5 +130,5 @@ Default temporary data directory self-test also passed.
 - Local transcription benchmark and installed Windows voices.
 - WebView2/Windows visual inspection after the approved-reference UI rewrite. macOS browser visual smoke passed, but Windows rendering remains unverified.
 - PyInstaller/pywebview bundle creation on Windows. The workflow/build script now runs `Coven.exe --self-test`, but that Windows runner has not been executed in this environment.
-- Inno Setup installer validation.
+- Inno Setup installer compile/install/upgrade/uninstall validation. The workflow now compiles an unsigned installer artifact after the portable smoke gate, but that workflow has not been executed from this environment.
 - Canvas frame timing and high-DPI layout on Windows.
