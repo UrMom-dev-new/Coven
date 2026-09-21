@@ -17,6 +17,7 @@ class DesktopStaticTests(unittest.TestCase):
     def test_desktop_self_test_validates_packaged_app_surface(self):
         source = (ROOT / "coven" / "desktop.py").read_text(encoding="utf-8")
 
+        self.assertIn("from coven.server import build_server", source)
         self.assertIn("--self-test", source)
         self.assertIn("coven-approved-reference.png", source)
         self.assertIn("--self-test-log", source)

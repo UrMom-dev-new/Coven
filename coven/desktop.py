@@ -14,9 +14,9 @@ import time
 import webbrowser
 from urllib import error as urllib_error, request as urllib_request
 
-from .paths import APP_NAME, local_app_data, runtime_dir, webview_user_data_dir
-from .server import build_server
-from .single_instance import current_user_instance
+from coven.paths import APP_NAME, local_app_data, runtime_dir, webview_user_data_dir
+from coven.server import build_server
+from coven.single_instance import current_user_instance
 
 
 class DesktopBridge:
