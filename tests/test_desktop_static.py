@@ -28,6 +28,7 @@ class DesktopStaticTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "windows-build.yml").read_text(encoding="utf-8")
         launcher = (ROOT / "scripts" / "start-coven.ps1").read_text(encoding="utf-8")
 
+        self.assertIn('python-version: "3.12"', workflow)
         self.assertIn("--self-test", build_script)
         self.assertIn("Approved reference image", build_script)
         self.assertIn("--self-test", workflow)
