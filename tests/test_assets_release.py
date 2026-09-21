@@ -53,6 +53,8 @@ class AssetReleaseTests(unittest.TestCase):
         self.assertIn("timeout-minutes: 2", workflow)
         self.assertIn("TimeoutSeconds", smoke_script)
         self.assertIn("Stop-Process", smoke_script)
+        self.assertIn("--self-test-log", smoke_script)
+        self.assertIn("Show-SelfTestLog", smoke_script)
 
 
 if __name__ == "__main__":

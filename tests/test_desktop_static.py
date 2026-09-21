@@ -19,6 +19,7 @@ class DesktopStaticTests(unittest.TestCase):
 
         self.assertIn("--self-test", source)
         self.assertIn("coven-approved-reference.png", source)
+        self.assertIn("--self-test-log", source)
         self.assertIn("sanctuary-art", source)
         self.assertIn("Prepare project brief", source)
         self.assertIn("Cache-Control", source)

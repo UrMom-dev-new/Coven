@@ -35,6 +35,26 @@ class DesktopSelfTestError(RuntimeError):
     """Raised when the packaged desktop smoke path fails."""
 
 
+def _append_self_test_log(log_path: Path | None, message: str) -> None:
+    if log_path is None:
+        return
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(f"{timestamp} {message}\n")
+    except OSError:
+        return
+
+
+def _self_test_print(message: str, *, error: bool = False) -> None:
+    stream = sys.stderr if error else sys.stdout
+    try:
+        print(message, file=stream)
+    except Exception:
+        return
+
+
 def allocate_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -100,28 +120,36 @@ def _json_body(body: bytes, context: str) -> dict[str, object]:
 
 
 def run_self_test(args: argparse.Namespace) -> int:
+    log_path = args.self_test_log
+    _append_self_test_log(log_path, "starting desktop self-test")
     previous_demo_mode = os.environ.get("COVEN_DEMO_MODE")
     os.environ["COVEN_DEMO_MODE"] = "1"
     token = args.auth_token or os.urandom(24).hex()
     port = args.port or allocate_port()
+    _append_self_test_log(log_path, f"using port {port}")
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
     data_dir = args.data_dir
     if data_dir is None:
         temp_dir = tempfile.TemporaryDirectory(prefix="coven-desktop-self-test-")
         data_dir = Path(temp_dir.name)
     data_dir.mkdir(parents=True, exist_ok=True)
+    _append_self_test_log(log_path, f"using data dir {data_dir}")
 
     server = None
     try:
+        _append_self_test_log(log_path, "starting loopback service")
         server, _thread = start_owned_server(port, data_dir, args.config, token)
+        _append_self_test_log(log_path, "waiting for loopback service readiness")
         if not wait_for_ready(port, timeout=args.self_test_timeout):
             raise DesktopSelfTestError("The local Coven service did not become ready.")
 
         base_url = f"http://127.0.0.1:{port}"
+        _append_self_test_log(log_path, "checking health endpoint")
         status, _headers, body = _http_request("GET", f"{base_url}/api/health")
         if status != 200 or _json_body(body, "Health check").get("ok") is not True:
             raise DesktopSelfTestError("Health check failed.")
 
+        _append_self_test_log(log_path, "bootstrapping authenticated session")
         status, headers, body = _http_request("POST", f"{base_url}/api/auth/session", payload={"token": token})
         if status != 201 or _json_body(body, "Auth session").get("authenticated") is not True:
             raise DesktopSelfTestError("Desktop auth session bootstrap failed.")
@@ -129,12 +157,14 @@ def run_self_test(args: argparse.Namespace) -> int:
         if not cookie:
             raise DesktopSelfTestError("Auth session did not return a session cookie.")
 
+        _append_self_test_log(log_path, "checking authenticated app shell")
         status, _headers, body = _http_request("GET", f"{base_url}/", cookie=cookie)
         shell = body.decode("utf-8", errors="replace")
         required_markers = ["sanctuary-art", "portrait-crop", "journal-tabs", "workspaceMode"]
         if status != 200 or any(marker not in shell for marker in required_markers):
             raise DesktopSelfTestError("Authenticated app shell did not include required UI markers.")
 
+        _append_self_test_log(log_path, "checking seeded demo tasks")
         status, _headers, body = _http_request("GET", f"{base_url}/api/tasks", cookie=cookie)
         tasks_payload = _json_body(body, "Task list")
         tasks = tasks_payload.get("tasks")
@@ -143,31 +173,39 @@ def run_self_test(args: argparse.Namespace) -> int:
         ):
             raise DesktopSelfTestError("Seeded demo quest journal was not available.")
 
+        _append_self_test_log(log_path, "checking approved reference image asset")
         status, headers, _body = _http_request("HEAD", f"{base_url}/assets/reference/coven-approved-reference.png")
         content_type = _header(headers, "Content-Type")
         content_length = int(_header(headers, "Content-Length") or "0")
         if status != 200 or content_type != "image/png" or content_length < 1_000_000:
             raise DesktopSelfTestError("Approved reference image asset was not served from the bundle.")
 
+        _append_self_test_log(log_path, "checking stylesheet cache policy")
         status, headers, _body = _http_request("HEAD", f"{base_url}/styles.css")
         if status != 200 or _header(headers, "Cache-Control") != "no-store":
             raise DesktopSelfTestError("Dynamic static asset cache policy is not active.")
 
-        print("Coven desktop self-test passed.")
+        _append_self_test_log(log_path, "desktop self-test passed")
+        _self_test_print("Coven desktop self-test passed.")
         return 0
     except Exception as exc:
-        print(f"Coven desktop self-test failed: {exc}", file=sys.stderr)
+        _append_self_test_log(log_path, f"desktop self-test failed: {exc}")
+        _self_test_print(f"Coven desktop self-test failed: {exc}", error=True)
         return 1
     finally:
         if server is not None:
+            _append_self_test_log(log_path, "shutting down loopback service")
             server.shutdown()
             server.server_close()
+            _append_self_test_log(log_path, "loopback service closed")
         if temp_dir is not None:
             temp_dir.cleanup()
+            _append_self_test_log(log_path, "temporary data dir removed")
         if previous_demo_mode is None:
             os.environ.pop("COVEN_DEMO_MODE", None)
         else:
             os.environ["COVEN_DEMO_MODE"] = previous_demo_mode
+        _append_self_test_log(log_path, "desktop self-test cleanup complete")
 
 
 def detect_webview2() -> tuple[bool, str]:
@@ -265,6 +303,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--demo", action="store_true", help="Run with the isolated demo namespace.")
     parser.add_argument("--self-test", action="store_true", help="Boot the local desktop service, validate bundled assets, then exit.")
     parser.add_argument("--self-test-timeout", type=float, default=8.0)
+    parser.add_argument("--self-test-log", type=Path, default=None)
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--remote-debugging-port", type=int, default=None)
     args = parser.parse_args(argv)
