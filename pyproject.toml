@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "coven-agent-workspace"
 version = "0.1.0"
@@ -14,6 +18,10 @@ desktop = [
 [project.scripts]
 coven-workspace = "coven.server:main"
 coven-desktop = "coven.desktop:main"
+
+[tool.setuptools.packages.find]
+include = ["coven*"]
+exclude = ["config*", "docs*", "packaging*", "public*", "scripts*", "tests*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -30,6 +30,19 @@ class AssetReleaseTests(unittest.TestCase):
         ]:
             self.assertTrue((ROOT / path).exists(), path)
 
+    def test_python_package_discovery_is_explicit(self):
+        source = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+        self.assertIn("[build-system]", source)
+        self.assertIn("[tool.setuptools.packages.find]", source)
+        self.assertIn('include = ["coven*"]', source)
+        self.assertIn('exclude = ["config*", "docs*", "packaging*", "public*", "scripts*", "tests*"]', source)
+
+    def test_windows_build_script_stops_on_native_command_failure(self):
+        source = (ROOT / "scripts" / "build-windows.ps1").read_text(encoding="utf-8")
+
+        self.assertIn('$PSNativeCommandUseErrorActionPreference = $true', source)
+
 
 if __name__ == "__main__":
     unittest.main()
