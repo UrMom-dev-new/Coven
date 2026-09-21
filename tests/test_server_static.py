@@ -13,6 +13,7 @@ class ServerStaticTests(unittest.TestCase):
         self.assertIn("send_body=False", source)
         self.assertIn('dynamic_suffixes = {".html", ".css", ".js", ".json"}', source)
         self.assertIn("daemon_threads = True", source)
+        self.assertIn("if sys.stderr is None", source)
 
 
 if __name__ == "__main__":

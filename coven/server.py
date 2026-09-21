@@ -65,7 +65,12 @@ class CovenHandler(BaseHTTPRequestHandler):
         return self.server  # type: ignore[return-value]
 
     def log_message(self, format: str, *args: object) -> None:
-        sys.stderr.write("[coven] " + format % args + "\n")
+        if sys.stderr is None:
+            return
+        try:
+            sys.stderr.write("[coven] " + format % args + "\n")
+        except (AttributeError, OSError, ValueError):
+            return
 
     def _send_json(self, payload: object, status: int = 200, headers: dict[str, str] | None = None) -> None:
         body = json_bytes(payload)
