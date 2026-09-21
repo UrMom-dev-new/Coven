@@ -68,6 +68,7 @@ class CovenStore:
             "name": name,
             "tasks": [],
             "conversations": {},
+            "runtimeSessions": {},
             "events": [],
             "cinematics": {"shownEventIds": [], "skippedEventIds": []},
         }
@@ -78,6 +79,9 @@ class CovenStore:
             for namespace in ("demo", "live"):
                 if namespace not in state["namespaces"]:
                     state["namespaces"][namespace] = self._empty_namespace(namespace)
+                    changed = True
+                if "runtimeSessions" not in state["namespaces"][namespace]:
+                    state["namespaces"][namespace]["runtimeSessions"] = {}
                     changed = True
             if "preferences" not in state:
                 state["preferences"] = self._preferences_from(state)
@@ -142,6 +146,34 @@ class CovenStore:
         with self._lock:
             state = self._read()
             return deepcopy(state["namespaces"][namespace]["conversations"].get(witch_id, []))
+
+    def runtime_session(self, witch_id: str, *, namespace: str, provider: str = "hermes") -> str | None:
+        witch_id = self._profile_id(witch_id)
+        namespace = self._namespace_name(namespace)
+        provider = self._bounded_text(provider, "Provider", max_length=80).strip()
+        with self._lock:
+            state = self._read()
+            record = state["namespaces"][namespace].setdefault("runtimeSessions", {}).get(witch_id)
+            if not isinstance(record, dict) or record.get("provider") != provider:
+                return None
+            session_id = record.get("sessionId")
+            return session_id if isinstance(session_id, str) and session_id else None
+
+    def set_runtime_session(self, witch_id: str, session_id: str, *, namespace: str, provider: str = "hermes") -> dict[str, Any]:
+        witch_id = self._profile_id(witch_id)
+        namespace = self._namespace_name(namespace)
+        provider = self._bounded_text(provider, "Provider", max_length=80).strip()
+        session_id = self._bounded_text(session_id, "Runtime session id", max_length=512).strip()
+        if not provider:
+            raise ValueError("Provider is required.")
+        if not session_id:
+            raise ValueError("Runtime session id is required.")
+        record = {"provider": provider, "sessionId": session_id, "updatedAt": utc_now()}
+        with self._lock:
+            state = self._read()
+            state["namespaces"][namespace].setdefault("runtimeSessions", {})[witch_id] = record
+            self._write(state)
+            return deepcopy(record)
 
     def append_message(self, witch_id: str, author: str, text: str, *, namespace: str) -> list[dict[str, Any]]:
         witch_id = self._profile_id(witch_id)

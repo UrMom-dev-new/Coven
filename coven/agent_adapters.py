@@ -63,7 +63,6 @@ class HermesAdapter:
         self.config = config
         self.base_url = config.runtime.hermes_api_base_url.rstrip("/")
         self.api_key = os.environ.get(config.runtime.hermes_api_key_env, "")
-        self._sessions: dict[str, str] = {}
 
     def available(self) -> bool:
         return bool(self.base_url and self.api_key)
@@ -110,13 +109,14 @@ class HermesAdapter:
         )
 
     def _session_for(self, witch_id: str) -> str:
-        if witch_id in self._sessions:
-            return self._sessions[witch_id]
+        existing = self.store.runtime_session(witch_id, namespace=self.namespace)
+        if existing:
+            return existing
         payload = self._request("POST", "/api/sessions", {"title": f"Coven {witch_id}", "source": "coven"})
         session_id = str(payload.get("id") or payload.get("session_id") or payload.get("sessionId") or "")
         if not session_id:
             raise AdapterError("Hermes did not return a session identifier.", code="hermes_session_missing", details=payload)
-        self._sessions[witch_id] = session_id
+        self.store.set_runtime_session(witch_id, session_id, namespace=self.namespace)
         return session_id
 
     def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:

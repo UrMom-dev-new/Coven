@@ -8,29 +8,49 @@
   </head>
   <body>
     <div class="app-shell">
-      <header class="hud" aria-label="Workspace status">
-        <div>
-          <p class="eyebrow">Local agent sanctuary</p>
+      <header class="topbar" aria-label="Workspace status">
+        <div class="brand-lockup">
           <h1>Coven</h1>
+          <span id="demoBadge" class="demo-badge" hidden>Demo</span>
         </div>
-        <dl class="hud-readouts">
-          <div>
-            <dt>Service</dt>
-            <dd id="connectionState">Checking</dd>
+        <nav class="section-tabs" aria-label="Primary sections">
+          <button class="tab-button" type="button" data-view="sanctuary" aria-selected="true">Sanctuary</button>
+          <button class="tab-button" type="button" data-view="journal" aria-selected="false">Journal</button>
+          <button class="tab-button" type="button" data-view="settings" aria-selected="false">Settings</button>
+        </nav>
+        <div class="topbar-actions">
+          <button id="compactToggle" class="ghost-button compact-action" type="button">Compact view</button>
+          <div class="workspace-state">
+            <span class="status-light" aria-hidden="true"></span>
+            <span id="workspaceMode">Workspace</span>
+            <span id="connectionState">Checking</span>
           </div>
-          <div>
-            <dt>Runtime</dt>
-            <dd id="runtimeRoute">Unknown</dd>
-          </div>
-          <div>
-            <dt>Local/API</dt>
-            <dd id="providerRoute">Unknown</dd>
-          </div>
-          <div>
-            <dt>Selected</dt>
-            <dd id="selectedWitchName">Morgana</dd>
-          </div>
-        </dl>
+        </div>
+      </header>
+
+      <section id="settingsPanel" class="settings-panel" aria-labelledby="settingsTitle" hidden>
+        <div class="settings-column">
+          <p class="eyebrow">Runtime</p>
+          <h2 id="settingsTitle">Settings</h2>
+          <dl class="hud-readouts">
+            <div>
+              <dt>Service</dt>
+              <dd id="settingsConnectionState">Checking</dd>
+            </div>
+            <div>
+              <dt>Runtime</dt>
+              <dd id="runtimeRoute">Unknown</dd>
+            </div>
+            <div>
+              <dt>Local/API</dt>
+              <dd id="providerRoute">Unknown</dd>
+            </div>
+            <div>
+              <dt>Selected</dt>
+              <dd id="selectedWitchName">Morgana</dd>
+            </div>
+          </dl>
+        </div>
         <div class="hud-controls" aria-label="Presentation controls">
           <label><input id="toggleMute" type="checkbox" /> Mute</label>
           <label><input id="toggleCinematics" type="checkbox" checked /> Failure scenes</label>
@@ -50,9 +70,6 @@
             </select>
           </label>
         </div>
-      </header>
-
-      <main class="workspace" id="workspace">
         <section class="onboarding-panel" aria-labelledby="onboardingTitle">
           <div class="panel-heading">
             <div>
@@ -63,14 +80,15 @@
           </div>
           <div id="onboardingChecks" class="check-grid"></div>
         </section>
+      </section>
 
+      <main class="workspace" id="workspace">
         <section class="sanctuary-panel" aria-labelledby="sanctuaryTitle">
           <div class="panel-heading">
             <div>
-              <p class="eyebrow">Playable workspace</p>
+              <p class="eyebrow">Sanctuary</p>
               <h2 id="sanctuaryTitle">The Sanctuary</h2>
             </div>
-            <button id="compactToggle" class="ghost-button" type="button">Compact work view</button>
           </div>
           <div class="sanctuary-stage">
             <img src="/assets/sanctuary.svg" alt="Gothic coven room with six witch workstations" />

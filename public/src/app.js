@@ -23,6 +23,7 @@ const state = {
   recording: null,
   compact: false,
   taskFilter: "all",
+  activeView: "sanctuary",
   game: null,
   refreshTimer: null,
   refreshInFlight: false,
@@ -92,9 +93,13 @@ function isTypingSensitive() {
 async function refreshStatus(force = false) {
   state.status = force ? await postJson("/api/status/refresh", {}) : await api("/api/status");
   $("connectionState").textContent = state.status.connection;
+  $("settingsConnectionState").textContent = state.status.connection;
+  $("workspaceMode").textContent = state.status.demoMode ? "Demo workspace" : "Live workspace";
+  $("demoBadge").hidden = !state.status.demoMode;
   $("runtimeRoute").textContent = state.status.routing.taskRuntime;
   $("providerRoute").textContent = `${state.status.routing.localModel} / ${state.status.routing.apiModel}`;
   $("taskingState").textContent = state.status.demoMode ? "Explicit demo mode" : "Live Hermes required";
+  document.body.dataset.connection = state.status.connection;
   if (!state.status.demoMode && state.status.connection === "disconnected") {
     setNotice("Hermes is not operational for this app namespace. Live task dispatch is disabled until configured.", "warn");
   } else if (state.status.demoMode) {
@@ -179,6 +184,7 @@ function renderRoster() {
       type: "button",
       dataset: { selected: witch.id === state.selectedWitch },
     }, [
+      node("img", { attrs: { src: witch.asset, alt: `${witch.name} portrait`, loading: "lazy" } }),
       node("span", { text: witch.name }),
       node("small", { text: witch.title }),
       node("b", { text: runtimeStateFor(witch.id) }),
@@ -263,14 +269,18 @@ function renderTasks() {
     list.append(node("p", { className: "empty-state", text: "No tasks recorded yet." }));
   }
   visibleTasks.forEach((task) => {
+    const assignee = profile(task.assignee);
     const button = node("button", {
       className: "task-row",
       type: "button",
       dataset: { status: task.status, selected: task.id === state.selectedTask },
     }, [
-      node("span", { text: task.title }),
-      node("small", { text: `${profile(task.assignee)?.name || task.assignee} - ${statusLabel(task.status)}` }),
-      node("b", { text: task.priority }),
+      node("img", { attrs: { src: assignee?.asset || "/assets/witches/morgana.svg", alt: "", loading: "lazy" } }),
+      node("div", { className: "task-copy" }, [
+        node("span", { text: task.title }),
+        node("small", { text: `${assignee?.name || task.assignee} - ${statusLabel(task.status)}` }),
+      ]),
+      node("b", { className: task.mode === "demo" ? "task-mode-badge" : "", text: task.mode === "demo" ? "Demo" : task.priority }),
     ]);
     button.addEventListener("click", () => {
       state.selectedTask = task.id;
@@ -505,6 +515,21 @@ function reassignCurrentFailure() {
   setNotice("Morgana is selected. Reassignment remains advisory until live Hermes dispatch is wired.", "info");
 }
 
+function setActiveView(view) {
+  state.activeView = view;
+  document.querySelectorAll(".tab-button").forEach((button) => {
+    button.setAttribute("aria-selected", String(button.dataset.view === view));
+  });
+  $("settingsPanel").hidden = view !== "settings";
+  if (view === "journal") {
+    $("journalTitle").scrollIntoView({ block: "start", behavior: "smooth" });
+  } else if (view === "sanctuary") {
+    $("sanctuaryTitle").scrollIntoView({ block: "start", behavior: "smooth" });
+  } else if (view === "settings") {
+    $("settingsTitle").scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+}
+
 function bindEvents() {
   $("messageForm").addEventListener("submit", sendMessage);
   $("taskForm").addEventListener("submit", assignTask);
@@ -513,9 +538,12 @@ function bindEvents() {
   $("compactToggle").addEventListener("click", () => {
     state.compact = !state.compact;
     $("workspace").classList.toggle("compact", state.compact);
-    $("compactToggle").textContent = state.compact ? "Sanctuary view" : "Compact work view";
+    $("compactToggle").textContent = state.compact ? "Sanctuary view" : "Compact view";
   });
-  $("dismissOnboarding").addEventListener("click", () => $("workspace").querySelector(".onboarding-panel")?.classList.add("dismissed"));
+  document.querySelectorAll(".tab-button").forEach((button) => {
+    button.addEventListener("click", () => setActiveView(button.dataset.view || "sanctuary"));
+  });
+  $("dismissOnboarding").addEventListener("click", () => document.querySelector(".onboarding-panel")?.classList.add("dismissed"));
   $("taskFilter").addEventListener("change", (event) => {
     state.taskFilter = event.target.value;
     renderTasks();

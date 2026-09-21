@@ -1,27 +1,31 @@
 const stations = {
-  morgana: { x: 705, y: 505, label: "Planning table" },
-  sybil: { x: 700, y: 280, label: "Scrying mirror" },
-  circe: { x: 385, y: 372, label: "Workbench" },
-  hecate: { x: 993, y: 374, label: "Wards" },
-  selene: { x: 190, y: 420, label: "Archive" },
-  ophelia: { x: 1120, y: 410, label: "River portal" },
+  morgana: { x: 705, y: 505, label: "Planning table", name: "Morgana" },
+  sybil: { x: 700, y: 280, label: "Scrying mirror", name: "Sybil" },
+  circe: { x: 385, y: 372, label: "Workbench", name: "Circe" },
+  hecate: { x: 993, y: 374, label: "Wards", name: "Hecate" },
+  selene: { x: 190, y: 420, label: "Archive", name: "Selene" },
+  ophelia: { x: 1120, y: 410, label: "River portal", name: "Ophelia" },
 };
 
 const walkable = { minX: 145, maxX: 1240, minY: 320, maxY: 635 };
+const POSITION_KEY = "coven.sanctuary.position.v1";
 
 export function createSanctuaryGame(canvas, options = {}) {
   const ctx = canvas.getContext("2d");
+  const savedPosition = readSavedPosition();
   const state = {
-    x: 700,
-    y: 615,
-    targetX: 700,
-    targetY: 615,
+    x: savedPosition.x,
+    y: savedPosition.y,
+    targetX: savedPosition.x,
+    targetY: savedPosition.y,
     keys: new Set(),
     selected: "morgana",
+    nearStation: null,
     running: true,
     last: performance.now(),
     lowEffects: false,
     taskStates: new Map(),
+    lastSavedAt: 0,
   };
 
   function setSelected(id) {
@@ -82,6 +86,11 @@ export function createSanctuaryGame(canvas, options = {}) {
   document.addEventListener("keydown", (event) => {
     if (isTyping(event.target)) return;
     const key = event.key.toLowerCase();
+    if (key === "enter" && state.nearStation) {
+      event.preventDefault();
+      emitSelect(state.nearStation);
+      return;
+    }
     if (["w", "a", "s", "d", "arrowup", "arrowleft", "arrowdown", "arrowright"].includes(key)) {
       event.preventDefault();
       state.keys.add(key);
@@ -119,7 +128,9 @@ export function createSanctuaryGame(canvas, options = {}) {
       state.y += (ty / distance) * step;
     }
     const station = nearestStation(state.x, state.y, 110);
-    options.onPrompt?.(station ? `Press Enter or click to talk with ${station}.` : "");
+    state.nearStation = station;
+    options.onPrompt?.(station ? `Press Enter or click to talk with ${stations[station].name}.` : "");
+    savePositionSoon(state);
   }
 
   function draw() {
@@ -199,4 +210,34 @@ export function createSanctuaryGame(canvas, options = {}) {
 
 function isTyping(target) {
   return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
+}
+
+function readSavedPosition() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(POSITION_KEY) || "null");
+    if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+      return clampToWalkable(saved.x, saved.y);
+    }
+  } catch {
+    return { x: 700, y: 615 };
+  }
+  return { x: 700, y: 615 };
+}
+
+function savePositionSoon(state) {
+  const now = performance.now();
+  if (now - state.lastSavedAt < 600) return;
+  state.lastSavedAt = now;
+  try {
+    window.localStorage.setItem(POSITION_KEY, JSON.stringify({ x: Math.round(state.x), y: Math.round(state.y) }));
+  } catch {
+    // Presentation state is helpful but not required for gameplay.
+  }
+}
+
+function clampToWalkable(x, y) {
+  return {
+    x: Math.max(walkable.minX, Math.min(walkable.maxX, x)),
+    y: Math.max(walkable.minY, Math.min(walkable.maxY, y)),
+  };
 }

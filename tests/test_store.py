@@ -79,6 +79,18 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(store.conversations("morgana", namespace="live")[0]["text"], "live note")
             self.assertEqual(store.snapshot(namespace="live")["tasks"], [])
 
+    def test_runtime_sessions_are_namespaced_and_persisted(self):
+        with TemporaryDirectory() as tmp:
+            store = self.make_store(tmp)
+            store.set_runtime_session("morgana", "hermes-live-123", namespace="live")
+            store.set_runtime_session("morgana", "hermes-demo-456", namespace="demo")
+
+            reopened = self.make_store(tmp)
+
+            self.assertEqual(reopened.runtime_session("morgana", namespace="live"), "hermes-live-123")
+            self.assertEqual(reopened.runtime_session("morgana", namespace="demo"), "hermes-demo-456")
+            self.assertIsNone(reopened.runtime_session("morgana", namespace="live", provider="other"))
+
     def test_old_state_migrates_to_demo_with_backup(self):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "state.json"
