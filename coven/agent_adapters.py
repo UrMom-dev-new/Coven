@@ -11,6 +11,7 @@ import uuid
 from urllib import error, request
 
 from .configuration import AppConfig, ConfigError, validate_priority
+from .integrations import IntegrationManager
 from .store import ASSISTANT_MESSAGE_LIMIT, USER_MESSAGE_LIMIT, CovenStore
 
 
@@ -65,6 +66,7 @@ class HermesAdapter:
         self.config = config
         self.base_url = config.runtime.hermes_api_base_url.rstrip("/")
         self.api_key = os.environ.get(config.runtime.hermes_api_key_env, "")
+        self.integrations = IntegrationManager(config)
 
     def available(self) -> bool:
         return bool(self.base_url and self.api_key)
@@ -94,6 +96,7 @@ class HermesAdapter:
                 code="hermes_api_unconfigured",
             )
         session_id = self._session_for(witch_id)
+        route = self._resolve_route(witch_id, {})
         self.store.append_message(
             witch_id,
             "user",
@@ -101,10 +104,20 @@ class HermesAdapter:
             namespace=self.namespace,
             status="sending",
             message_id=message_id,
-            details={"sessionId": session_id},
+            details={"sessionId": session_id, "requestedRuntime": route},
         )
+        chat_payload: dict[str, Any] = {
+            "input": text,
+            "instructions": self._role_instructions(witch_id),
+        }
+        if route.get("provider"):
+            chat_payload["provider"] = route["provider"]
+        if route.get("model"):
+            chat_payload["model"] = route["model"]
+        if route.get("modelOptions"):
+            chat_payload["model_options"] = route["modelOptions"]
         try:
-            payload = self._request("POST", f"/api/sessions/{session_id}/chat", {"input": text})
+            payload = self._request("POST", f"/api/sessions/{session_id}/chat", chat_payload)
         except AdapterError as exc:
             status = "uncertain" if exc.code in {"hermes_timeout", "hermes_connection_error"} else "failed"
             self.store.update_message_delivery(
@@ -140,32 +153,47 @@ class HermesAdapter:
             )
         session_id = self._session_for(assignee)
         route = self._resolve_route(assignee, body)
-        task = self.store.create_live_task(
+        request_payload = self._run_payload(
             assignee=assignee,
             title=title,
             instructions=instructions,
             priority=priority,
-            idempotency_key=idempotency_key,
             session_id=session_id,
-            requested_runtime=route,
-            parent_task_id=body.get("parentTaskId") if isinstance(body.get("parentTaskId"), str) else None,
-            attempt=body.get("attempt") if isinstance(body.get("attempt"), int) and body.get("attempt") > 0 else 1,
+            route=route,
         )
-        payload: dict[str, Any] = {
-            "input": self._task_input(task),
-            "session_id": session_id,
-            "instructions": self._role_instructions(assignee),
-        }
-        if route.get("provider"):
-            payload["provider"] = route["provider"]
-        if route.get("model"):
-            payload["model"] = route["model"]
-        if route.get("modelOptions"):
-            payload["model_options"] = route["modelOptions"]
+        try:
+            task = self.store.create_live_task(
+                assignee=assignee,
+                title=title,
+                instructions=instructions,
+                priority=priority,
+                idempotency_key=idempotency_key,
+                session_id=session_id,
+                requested_runtime=route,
+                request_payload=request_payload,
+                execution_scope=self._execution_scope(body),
+                parent_task_id=body.get("parentTaskId") if isinstance(body.get("parentTaskId"), str) else None,
+                attempt=body.get("attempt") if isinstance(body.get("attempt"), int) and body.get("attempt") > 0 else 1,
+            )
+        except ValueError as exc:
+            raise AdapterError(str(exc), code="idempotency_conflict") from exc
+        if task.get("hermes", {}).get("runId"):
+            return AdapterResult(task=self.refresh_task(task), details={"recovered": True})
+        return self._submit_live_task(task)
+
+    def _submit_live_task(self, task: dict[str, Any]) -> AdapterResult:
+        hermes = task.get("hermes", {})
+        payload = hermes.get("requestPayload")
+        if not isinstance(payload, dict):
+            raise AdapterError("Task has no recoverable Hermes request payload.", code="hermes_payload_missing")
+        idempotency_key = str(hermes.get("idempotencyKey") or "")
+        session_id = str(hermes.get("sessionId") or payload.get("session_id") or "")
+        if not idempotency_key:
+            raise AdapterError("Task has no idempotency key.", code="hermes_idempotency_missing")
         headers = {
             "Idempotency-Key": idempotency_key,
             "X-Hermes-Session-Id": session_id,
-            "X-Hermes-Session-Key": self._session_key(assignee),
+            "X-Hermes-Session-Key": self._session_key(task.get("assignee", "morgana")),
         }
         try:
             response_headers, run_payload = self._request_with_headers("POST", "/v1/runs", payload, headers=headers, timeout=15)
@@ -189,6 +217,14 @@ class HermesAdapter:
         except AdapterError:
             pass
         return AdapterResult(task=task, details={"run": run_payload, "replayed": replayed})
+
+    def recover_submission(self, task_id: str) -> AdapterResult:
+        task = self.store.task(task_id, namespace=self.namespace)
+        if task.get("hermes", {}).get("runId"):
+            return AdapterResult(task=self.refresh_task(task), details={"recovered": True})
+        if task.get("status") not in {"queued", "unknown", "disconnected"}:
+            raise AdapterError("Only unresolved live submissions can be recovered.", code="submission_recovery_unavailable")
+        return self._submit_live_task(task)
 
     def retry_task(self, task_id: str) -> AdapterResult:
         original = self.store.task(task_id, namespace=self.namespace)
@@ -229,9 +265,15 @@ class HermesAdapter:
         if not run_id:
             raise AdapterError("Task has no Hermes run id.", code="hermes_run_id_missing")
         payload = self._request("GET", f"/v1/runs/{run_id}", timeout=8)
+        if isinstance(payload.get("artifacts"), list):
+            payload = dict(payload)
+            payload["artifacts"] = self.integrations.validate_artifact_claims(payload["artifacts"])
         return self.store.update_live_task_from_run(task["id"], payload)
 
     def stop_task(self, task_id: str) -> AdapterResult:
+        capabilities = self.capabilities()
+        if not self._feature_enabled(capabilities, "run_stop"):
+            raise AdapterError("The configured Hermes API server does not advertise run stop support.", code="hermes_run_stop_unavailable")
         task = self.store.task(task_id, namespace=self.namespace)
         run_id = task.get("hermes", {}).get("runId")
         if not run_id:
@@ -249,7 +291,13 @@ class HermesAdapter:
     def resolve_approval(self, task_id: str, decision: str) -> AdapterResult:
         if decision not in {"once", "deny"}:
             raise AdapterError("Approval decision must be once or deny.", code="invalid_approval_decision")
+        capabilities = self.capabilities()
+        if not self._feature_enabled(capabilities, "run_approval"):
+            raise AdapterError("The configured Hermes API server does not advertise approval support.", code="hermes_approval_unavailable")
         task = self.store.task(task_id, namespace=self.namespace)
+        approval = task.get("approval") if isinstance(task.get("approval"), dict) else {}
+        if task.get("status") != "waiting_for_approval" and approval.get("state") != "pending":
+            raise AdapterError("This task has no pending approval action.", code="approval_not_pending")
         run_id = task.get("hermes", {}).get("runId")
         if not run_id:
             raise AdapterError("Task has no Hermes run id for approval.", code="hermes_run_id_missing")
@@ -432,24 +480,61 @@ class HermesAdapter:
             "reason": reason,
         }
 
+    def _run_payload(
+        self,
+        *,
+        assignee: str,
+        title: str,
+        instructions: str,
+        priority: str,
+        session_id: str,
+        route: dict[str, Any],
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "input": self._task_input_from_parts(title=title, assignee=assignee, priority=priority, instructions=instructions),
+            "session_id": session_id,
+            "instructions": self._role_instructions(assignee),
+        }
+        if route.get("provider"):
+            payload["provider"] = route["provider"]
+        if route.get("model"):
+            payload["model"] = route["model"]
+        if route.get("modelOptions"):
+            payload["model_options"] = route["modelOptions"]
+        return payload
+
+    def _execution_scope(self, body: dict[str, Any]) -> dict[str, Any]:
+        project = body.get("project") if isinstance(body.get("project"), str) else "default"
+        documents = body.get("documents") if isinstance(body.get("documents"), list) else []
+        destination = body.get("destination") if isinstance(body.get("destination"), dict) else {}
+        return {"project": project, "documents": documents[:20], "destination": destination}
+
     def _task_input(self, task: dict[str, Any]) -> str:
-        instructions = task.get("instructions") or "(No additional instructions.)"
+        return self._task_input_from_parts(
+            title=task["title"],
+            assignee=task["assignee"],
+            priority=task["priority"],
+            instructions=task.get("instructions") or "",
+        )
+
+    def _task_input_from_parts(self, *, title: str, assignee: str, priority: str, instructions: str) -> str:
+        instructions = instructions or "(No additional instructions.)"
         return (
-            f"Coven task: {task['title']}\n"
-            f"Assigned witch: {task['assignee']}\n"
-            f"Priority: {task['priority']}\n\n"
+            f"Coven task: {title}\n"
+            f"Assigned witch: {assignee}\n"
+            f"Priority: {priority}\n\n"
             f"Instructions:\n{instructions}\n\n"
             "Return concrete progress, final result, and artifact paths only for files that actually exist."
         )
 
     def _role_instructions(self, witch_id: str) -> str:
         roles = {
-            "morgana": "You are Morgana, coordinator. Plan, assign, track dependencies, and consolidate results. You cannot grant permissions.",
-            "sybil": "You are Sybil, researcher. Favor evidence gathering, comparison, and citations. Avoid write actions unless explicitly permitted.",
-            "circe": "You are Circe, builder. Create code/artifacts only inside the selected permitted workspace and report checks run.",
-            "hecate": "You are Hecate, reviewer. Review diffs, tests, permissions, and completion evidence. Do not approve your own elevation.",
-            "selene": "You are Selene, archivist. Maintain project notes and memory in designated locations. Never store credentials.",
-            "ophelia": "You are Ophelia, failure analyst. Diagnose failures and propose recovery; do not automatically retry or destroy state.",
+            "morgana": "You are Morgana, coordinator. Plan, assign, track dependencies, and consolidate results. You cannot grant permissions or execute document mutations yourself.",
+            "sybil": "You are Sybil, researcher. Favor evidence gathering, comparison, and citations. Use read-oriented scopes only unless the user explicitly authorizes a mutation.",
+            "circe": "You are Circe, builder. Create code/artifacts and Office/GovDash review outputs only through configured structured tools and permitted workspaces.",
+            "hecate": "You are Hecate, reviewer. Review diffs, formulas, document changes, permissions, and completion evidence. Do not approve your own elevation.",
+            "selene": "You are Selene, archivist. Maintain project notes, document versions, remote identifiers and memory in designated locations. Never store credentials.",
+            "ophelia": "You are Ophelia, failure analyst. Diagnose failures and propose bounded recovery; do not automatically retry, delete, or repeat uncertain external writes.",
         }
         return roles.get(witch_id, roles["morgana"])
 

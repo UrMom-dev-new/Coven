@@ -5,6 +5,9 @@ No Windows VM, Dell Inspiron, WebView2 runtime, Hermes install, microphone hardw
 ## Implemented Artifacts
 
 - `coven/desktop.py` desktop entry point.
+- `coven/reconciler.py` background live-run reconciler.
+- `coven/evidence.py` independent artifact inspector.
+- `coven/integrations.py` Office, Microsoft Graph and GovDash integration status boundary.
 - PyInstaller spec: `packaging/Coven.spec`.
 - Windows build script: `scripts/build-windows.ps1`.
 - Inno Setup script: `packaging/installer/Coven.iss`.
@@ -23,9 +26,14 @@ No Windows VM, Dell Inspiron, WebView2 runtime, Hermes install, microphone hardw
 | Local-model chat/task | Unverified | Local/API route selection is implemented, but Ollama and Hermes local-provider execution were not verified on Windows. |
 | Sanctuary exploration and compact work view | Partially implemented | Canvas movement, station interaction and approved-reference UI shell smoke are implemented; real WebView2/Windows visual QA remains. |
 | Needs-input/approval/cancel/retry/evidence preservation | Partial | Live stop, approval, retry, evidence and artifact fields are implemented against the documented Runs API and deterministic mocks; live Hermes proof remains blocked. |
+| Lost submission response -> recover without duplicate local task | Partial | Unit tests confirm recoverable local payload storage, same-key/same-payload reuse and same-key/different-payload rejection; live Hermes idempotency replay remains blocked. |
+| Artifact evidence is independently verified | Source-tested | Unit tests confirm model claims remain reported until local inspection under configured roots, with size/hash validation. Windows workspace-root validation remains. |
+| Office document inspection/review/export | Blocked | Integration status and fail-closed operation boundary are implemented; live Office automation requires interactive Windows Office install and bridge verification. |
+| Microsoft Graph selected-location file/workbook access | Blocked | Tenant/cloud/token readiness reporting is implemented; delegated tenant auth and selected SharePoint/OneDrive operations were unavailable. |
+| GovDash proposal exchange | Blocked | SharePoint/API/browser route status is implemented; actual GovDash account/entitlement and exchange route were unavailable. |
 | Controlled terminal failure -> one Ophelia scene -> report -> recovery | Fixture-tested at API level | Demo and live-store terminal failure de-duplication are unit-tested; browser playback on Windows remains unverified. |
 | Voice round-trip | Partial | Browser/WebView speech APIs are used when exposed and transcripts are scoped by witch; microphone permission, installed Windows voices and transcription quality remain unverified. |
-| Restart during run, provider disconnect/reconnect, sleep/resume, duplicate launch | Partial | Single-instance guard and run reconciliation via `GET /v1/runs/{run_id}` are implemented; real gateway interruption/retention behavior requires Hermes. |
+| Restart during run, provider disconnect/reconnect, sleep/resume, duplicate launch | Partial | Single-instance guard, background run reconciliation via `GET /v1/runs/{run_id}` and lost-submission recovery are implemented; real gateway interruption/retention behavior requires Hermes. |
 | Missing model/key/WebView2/malformed events/hostile HTML/unauthorized local requests | Partial | Auth/origin/malformed event/HTML regressions tested; WebView2 missing path is code-only. |
 | Portable executable boots authenticated app shell | Source-tested, Windows pending | `python -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-final.log` passed on macOS source tree; Windows CI runs packaged `Coven.exe --self-test` when pushed. |
 | Installer compile, fresh install, upgrade/uninstall/reinstall with retained data, paths with spaces/non-ASCII, standard user, high DPI | Partially implemented | CI now compiles an unsigned Inno Setup installer artifact; clean Windows VM install/upgrade/uninstall remains blocked. |

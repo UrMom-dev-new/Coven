@@ -71,6 +71,9 @@ python3 -m unittest discover -s tests
 - Loopback-only local server in `coven.server`.
 - Runtime inspection for Hermes, Ollama, OpenAI env configuration, and a development-machine hardware summary.
 - Authenticated Hermes API readiness checks for `/health`, `/v1/capabilities`, `/health/detailed`, and provider-aware model options when configured.
+- Idempotent live task submission with recoverable request payloads, cached background reconciliation, and stale-terminal-update protection.
+- External integration status boundaries for permitted workspaces, installed Office automation, Microsoft Graph and GovDash exchange routes.
+- Independent artifact inspection for model-reported local file paths under configured workspace roots.
 - Six configurable profiles in `config/witches.json`.
 - Approved-reference sanctuary UI with keyboard-accessible roster and hotspots.
 - Separate conversation composer and task assignment form.
@@ -84,12 +87,13 @@ python3 -m unittest discover -s tests
 ## What Is Not Claimed Yet
 
 - Live Hermes task/run lifecycle code is implemented against the documented Runs API and deterministic mocks, but no live Hermes server was available in this environment.
+- Installed Office automation, Microsoft Graph and GovDash routes are surfaced as explicit configured/blocked/operational integration states, but live Office, tenant and GovDash entitlement tests were not available here.
 - Hermes was not installed in the development environment used for this commit, so served-provider evidence from a real model is still blocked.
 - The Dell Inspiron target hardware was not available, so Windows behavior, performance, local transcription benchmarking, and browser codec behavior still require validation there.
 - No OpenAI API credential was available in this environment, so live API calls were not exercised.
 - The main sanctuary and portrait presentation now use the approved reference bitmap. Native animation/video polish and Windows high-DPI visual acceptance still require target-machine validation.
 
-See `docs/integration-note.md`, `docs/permission-matrix.md`, and `docs/validation.md` for the implementation contract and remaining gates.
+See `docs/integration-note.md`, `docs/permission-matrix.md`, `docs/integration-capability-matrix.md`, `docs/office-govdash-setup.md`, and `docs/validation.md` for the implementation contract and remaining gates.
 
 Additional beta docs:
 

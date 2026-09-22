@@ -32,6 +32,10 @@ Current tests cover:
 - Persisted presentation preference validation.
 - Static frontend checks for no dynamic `innerHTML` in the app controller and explicit `[hidden]` overlay CSS.
 - Demo and Hermes adapter behavior, including empty-response rejection, long-output persistence, pre-dispatch validation, uncertain delivery recovery, live Runs API submission/reconciliation shape, and session reuse.
+- Live submission recovery behavior, including stored run payloads, duplicate-safe idempotency reuse, idempotency conflict rejection and stale-terminal-update protection.
+- Independent artifact validation under configured workspace roots, including fail-closed handling for untrusted model claims and malformed expected metadata.
+- Office, Microsoft Graph and GovDash integration status boundaries, including fail-closed Office operations when no Windows bridge is available.
+- Integration config validation for Graph cloud, GovDash route and environment-provided workspace roots.
 - Authenticated Hermes API readiness probing through capabilities rather than CLI-version readiness.
 - Asset manifest/package scaffold existence and static server cache/HEAD behavior.
 - Canvas sanctuary module visibility pause and station interaction event wiring.
@@ -43,7 +47,7 @@ Most recent run in this environment:
 
 ```text
 python3 -m unittest discover -s tests
-Ran 45 tests in 0.040s - OK
+Ran 63 tests in 0.062s - OK
 
 /Users/nefarioususer/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check public/src/app.js / auth.js / api.js / dom.js / game.js / presentation.js
 python3 -m compileall coven tests
@@ -109,7 +113,7 @@ HEAD /styles.css -> 200 text/css, Cache-Control: no-store
 Desktop self-test smoke performed on macOS development host after the Windows packaging pass:
 
 ```text
-python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-final.log
+python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-office-govdash.log
 GET /api/health -> 200
 POST /api/auth/session -> 201
 GET / -> 200

@@ -18,6 +18,8 @@ from .adapters import default_data_dir
 from .agent_adapters import AdapterError, build_agent_adapter
 from .auth import AuthManager, has_write_intent, is_allowed_origin
 from .configuration import ConfigError, load_app_config
+from .integrations import IntegrationManager
+from .reconciler import TaskReconciler
 from .runtime import RuntimeInspector
 from .store import CovenStore
 from .voice import VoiceService
@@ -55,6 +57,14 @@ class CovenHTTPServer(ThreadingHTTPServer):
     namespace: str
     agent_adapter: object
     voice: VoiceService
+    integrations: IntegrationManager
+    reconciler: TaskReconciler | None
+
+    def server_close(self) -> None:
+        reconciler = getattr(self, "reconciler", None)
+        if reconciler is not None:
+            reconciler.stop()
+        super().server_close()
 
 
 class CovenHandler(BaseHTTPRequestHandler):
@@ -142,17 +152,21 @@ class CovenHandler(BaseHTTPRequestHandler):
             self._send_json({"authenticated": self._is_authenticated(), "bootstrapUsed": self.app.auth.bootstrap_used})
         elif path == "/api/status":
             if self._require_auth():
-                self._send_json(self.app.runtime.get())
+                payload = self.app.runtime.get()
+                payload["reconciler"] = self.app.reconciler.snapshot() if self.app.reconciler else {"running": False}
+                payload["integrations"] = self.app.integrations.status()
+                self._send_json(payload)
         elif path == "/api/config":
             if self._require_auth():
                 self._send_json({"namespace": self.app.namespace})
+        elif path == "/api/integrations/status":
+            if self._require_auth():
+                self._send_json({"integrations": self.app.integrations.status()})
         elif path == "/api/profiles":
             if self._require_auth():
                 self._send_json({"witches": self.app.store.profiles()})
         elif path == "/api/tasks":
             if self._require_auth():
-                if self.app.namespace == "live" and hasattr(self.app.agent_adapter, "refresh_tasks"):
-                    self.app.agent_adapter.refresh_tasks()  # type: ignore[attr-defined]
                 scope = self.app.store.snapshot(
                     namespace=self.app.namespace,
                     advance_demo=self.app.namespace == "demo",
@@ -161,8 +175,6 @@ class CovenHandler(BaseHTTPRequestHandler):
         elif path.startswith("/api/tasks/"):
             if self._require_auth():
                 task_id = unquote(path.rsplit("/", 1)[-1])
-                if self.app.namespace == "live" and hasattr(self.app.agent_adapter, "refresh_tasks"):
-                    self.app.agent_adapter.refresh_tasks()  # type: ignore[attr-defined]
                 scope = self.app.store.snapshot(
                     namespace=self.app.namespace,
                     advance_demo=self.app.namespace == "demo",
@@ -222,7 +234,10 @@ class CovenHandler(BaseHTTPRequestHandler):
             elif not self._is_authenticated():
                 self._send_error_json(HTTPStatus.UNAUTHORIZED, "Authentication is required.", code="auth_required")
             elif path == "/api/status/refresh":
-                self._send_json(self.app.runtime.get(force=True))
+                payload = self.app.runtime.get(force=True)
+                payload["reconciler"] = self.app.reconciler.snapshot() if self.app.reconciler else {"running": False}
+                payload["integrations"] = self.app.integrations.status()
+                self._send_json(payload)
             elif path.startswith("/api/conversations/"):
                 witch_id = unquote(path.rsplit("/", 1)[-1])
                 text = body.get("message")
@@ -245,6 +260,22 @@ class CovenHandler(BaseHTTPRequestHandler):
                 task_id = unquote(path.split("/")[-2])
                 result = self.app.agent_adapter.stop_task(task_id)  # type: ignore[attr-defined]
                 self._send_json({"task": result.task, "details": result.details})
+            elif path.startswith("/api/tasks/") and path.endswith("/recover-submission"):
+                task_id = unquote(path.split("/")[-2])
+                result = self.app.agent_adapter.recover_submission(task_id)  # type: ignore[attr-defined]
+                self._send_json({"task": result.task, "details": result.details})
+            elif path.startswith("/api/tasks/") and path.endswith("/validate-artifacts"):
+                task_id = unquote(path.split("/")[-2])
+                task = self.app.store.task(task_id, namespace=self.app.namespace)
+                artifacts = self.app.integrations.validate_artifact_claims(task.get("artifacts") or [])
+                if self.app.namespace == "live":
+                    task = self.app.store.update_live_task(
+                        task_id,
+                        artifacts=artifacts,
+                        timeline_kind="artifact_validation",
+                        timeline_message="Artifact claims were independently inspected by Coven.",
+                    )
+                self._send_json({"task": task, "artifacts": artifacts})
             elif path.startswith("/api/tasks/") and path.endswith("/approval"):
                 task_id = unquote(path.split("/")[-2])
                 decision = body.get("decision")
@@ -268,6 +299,14 @@ class CovenHandler(BaseHTTPRequestHandler):
                 )
             elif path == "/api/settings":
                 self._send_json({"settings": self.app.store.update_preferences(body)})
+            elif path == "/api/integrations/office/operation":
+                operation = body.get("operation")
+                payload = body.get("payload")
+                if not isinstance(operation, str):
+                    raise ValueError("operation must be a string.")
+                if not isinstance(payload, dict):
+                    raise ValueError("payload must be an object.")
+                self._send_json({"result": self.app.integrations.execute_office_operation(operation, payload)})
             else:
                 self._send_error_json(HTTPStatus.NOT_FOUND, "Unknown endpoint.", code="not_found")
         except PermissionError as exc:
@@ -329,6 +368,11 @@ def build_server(
     server.namespace = "demo" if config.demo_mode else "live"
     server.agent_adapter = build_agent_adapter(config, server.store)
     server.voice = VoiceService()
+    server.integrations = IntegrationManager(config)
+    server.reconciler = None
+    if server.namespace == "live" and hasattr(server.agent_adapter, "refresh_tasks"):
+        server.reconciler = TaskReconciler(server.agent_adapter)
+        server.reconciler.start()
     return server
 
 

@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 from unittest import mock
@@ -54,6 +55,23 @@ class AuthConfigTests(unittest.TestCase):
             self.assertEqual(load_app_config().runtime.mode, "live")
         with mock.patch.dict(os.environ, {"COVEN_DEMO_MODE": "true"}, clear=False):
             self.assertEqual(load_app_config().runtime.mode, "demo")
+
+    def test_integration_config_validation(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "coven.json"
+            path.write_text('{"microsoftGraph": {"cloud": "moon"}}', encoding="utf-8")
+            with self.assertRaises(ConfigError):
+                load_app_config(path)
+
+            path.write_text('{"govdash": {"route": "telepathy"}}', encoding="utf-8")
+            with self.assertRaises(ConfigError):
+                load_app_config(path)
+
+    def test_workspace_roots_can_include_environment_entries(self):
+        with TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"COVEN_ALLOWED_WORKSPACE_ROOTS": tmp}, clear=False):
+            roots = load_app_config().workspace.allowed_roots
+
+            self.assertIn(Path(tmp).resolve(), roots)
 
 
 if __name__ == "__main__":
