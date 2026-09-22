@@ -19,8 +19,9 @@ Checked during this implementation on 2026-09-21 from public documentation. Herm
 - Live mode uses `HermesAdapter` only when `runtime.hermesApiBaseUrl` and `runtime.hermesApiKeyEnvironmentVariable` are configured.
 - Live chat validates input before dispatch, stores outgoing delivery state, and treats empty or unfamiliar responses as failures.
 - Live task creation requires `/v1/capabilities` to advertise `run_submission` and `run_status`; stop and approval controls use the corresponding advertised endpoints when available.
-- Live task records retain local task ID, attempt ID, Hermes run/session IDs, idempotency key, requested runtime, served runtime, usage, approval, artifact references, evidence and bounded timeline history.
-- Reconciliation uses `GET /v1/runs/{run_id}` on task-list refresh. Structured events included in run payloads are summarized in the Quest Journal. Persistent SSE consumption from `/events` still requires live Hermes validation before it can be claimed.
+- Live task records retain local task ID, attempt ID, Hermes run/session IDs, idempotency key, request-payload hash, recoverable request payload, requested runtime, served runtime, usage, approval, artifact references, evidence and bounded timeline history.
+- Repeated same-key/same-payload submissions reuse the existing local task; same-key/different-payload submissions are rejected before remote dispatch.
+- Reconciliation uses `GET /v1/runs/{run_id}` from a background reconciler so task-list reads stay local and quick. Structured events included in run payloads are summarized in the Quest Journal. Persistent SSE consumption from `/events` still requires live Hermes validation before it can be claimed.
 
 ## Required Live Gate
 
@@ -29,4 +30,5 @@ Checked during this implementation on 2026-09-21 from public documentation. Herm
 3. Confirm `/v1/capabilities` advertises `run_submission`, `run_status`, and any optional `run_events_sse`, `run_stop`, and `run_approval` features used in the UI.
 4. Run one real chat and one scoped file-writing task in a disposable authorized workspace.
 5. Confirm idempotent retry of an uncertain submission reuses the same run rather than creating duplicate side effects.
-6. Record exact Hermes version, endpoint, provider/model, results and artifact paths in `docs/windows-beta-acceptance.md`.
+6. Validate reported artifact paths under configured workspace roots and record hashes.
+7. Record exact Hermes version, endpoint, provider/model, results and artifact paths in `docs/windows-beta-acceptance.md`.

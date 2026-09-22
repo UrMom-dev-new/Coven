@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import os
 from pathlib import Path
@@ -51,11 +51,45 @@ class CinematicConfig:
 
 
 @dataclass(frozen=True)
+class WorkspaceConfig:
+    allowed_roots: tuple[Path, ...] = ()
+
+
+@dataclass(frozen=True)
+class OfficeConfig:
+    enabled: bool = False
+    bridge_executable: str = ""
+    operation_timeout_seconds: int = 60
+
+
+@dataclass(frozen=True)
+class MicrosoftGraphConfig:
+    enabled: bool = False
+    cloud: str = "commercial"
+    tenant_id: str = ""
+    client_id: str = ""
+    token_environment_variable: str = "COVEN_GRAPH_ACCESS_TOKEN"
+
+
+@dataclass(frozen=True)
+class GovDashConfig:
+    enabled: bool = False
+    route: str = "sharepoint"
+    base_url: str = ""
+    browser_profile_dir: Path | None = None
+    sharepoint_root: str = ""
+
+
+@dataclass(frozen=True)
 class AppConfig:
     server: ServerConfig
     runtime: RuntimeConfig
     providers: ProviderConfig
     cinematics: CinematicConfig
+    workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
+    office: OfficeConfig = field(default_factory=OfficeConfig)
+    microsoft_graph: MicrosoftGraphConfig = field(default_factory=MicrosoftGraphConfig)
+    govdash: GovDashConfig = field(default_factory=GovDashConfig)
 
     @property
     def demo_mode(self) -> bool:
@@ -122,6 +156,10 @@ def load_app_config(path: Path | None = None) -> AppConfig:
     ollama = _object(providers.get("ollama", {}), "providers.ollama")
     openai = _object(providers.get("openai", {}), "providers.openai")
     cinematics = _object(data.get("cinematics", {}), "cinematics")
+    workspace = _object(data.get("workspace", {}), "workspace")
+    office = _object(data.get("office", {}), "office")
+    microsoft = _object(data.get("microsoftGraph", {}), "microsoftGraph")
+    govdash = _object(data.get("govdash", {}), "govdash")
 
     env_demo = os.environ.get("COVEN_DEMO_MODE")
     mode = _string(runtime.get("mode", "live"), "runtime.mode").strip().lower()
@@ -145,6 +183,12 @@ def load_app_config(path: Path | None = None) -> AppConfig:
     motion = _string(cinematics.get("reducedMotionMode", "tableau"), "cinematics.reducedMotionMode")
     if motion not in VALID_MOTION_MODES:
         raise ConfigError("cinematics.reducedMotionMode is invalid.")
+    graph_cloud = _string(microsoft.get("cloud", "commercial"), "microsoftGraph.cloud").strip().lower()
+    if graph_cloud not in {"commercial", "gcc", "gcc_high", "dod"}:
+        raise ConfigError("microsoftGraph.cloud must be commercial, gcc, gcc_high or dod.")
+    govdash_route = _string(govdash.get("route", "sharepoint"), "govdash.route").strip().lower()
+    if govdash_route not in {"sharepoint", "api", "browser"}:
+        raise ConfigError("govdash.route must be sharepoint, api or browser.")
 
     return AppConfig(
         server=ServerConfig(host=host, port=port, data_dir=data_dir),
@@ -165,6 +209,31 @@ def load_app_config(path: Path | None = None) -> AppConfig:
             failure_scene=parse_bool(cinematics.get("failureScene", True), default=True),
             reduced_motion_mode=motion,
             mute_by_default=parse_bool(cinematics.get("muteByDefault", False), default=False),
+        ),
+        workspace=WorkspaceConfig(allowed_roots=_workspace_roots(workspace)),
+        office=OfficeConfig(
+            enabled=parse_bool(office.get("enabled", False), default=False),
+            bridge_executable=_string(office.get("bridgeExecutable", ""), "office.bridgeExecutable"),
+            operation_timeout_seconds=_positive_int(office.get("operationTimeoutSeconds", 60), "office.operationTimeoutSeconds"),
+        ),
+        microsoft_graph=MicrosoftGraphConfig(
+            enabled=parse_bool(microsoft.get("enabled", False), default=False),
+            cloud=graph_cloud,
+            tenant_id=_string(microsoft.get("tenantId", ""), "microsoftGraph.tenantId"),
+            client_id=_string(microsoft.get("clientId", ""), "microsoftGraph.clientId"),
+            token_environment_variable=_string(
+                microsoft.get("tokenEnvironmentVariable", "COVEN_GRAPH_ACCESS_TOKEN"),
+                "microsoftGraph.tokenEnvironmentVariable",
+            ),
+        ),
+        govdash=GovDashConfig(
+            enabled=parse_bool(govdash.get("enabled", False), default=False),
+            route=govdash_route,
+            base_url=_string(govdash.get("baseUrl", ""), "govdash.baseUrl"),
+            browser_profile_dir=Path(_string(govdash["browserProfileDir"], "govdash.browserProfileDir")).expanduser()
+            if "browserProfileDir" in govdash
+            else None,
+            sharepoint_root=_string(govdash.get("sharePointRoot", ""), "govdash.sharePointRoot"),
         ),
     )
 
@@ -225,3 +294,35 @@ def _int(value: Any, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ConfigError(f"{field} must be an integer.")
     return value
+
+
+def _positive_int(value: Any, field: str) -> int:
+    parsed = _int(value, field)
+    if parsed <= 0:
+        raise ConfigError(f"{field} must be positive.")
+    return parsed
+
+
+def _workspace_roots(workspace: dict[str, Any]) -> tuple[Path, ...]:
+    raw = workspace.get("allowedRoots")
+    values: list[str] = []
+    if raw is not None:
+        if not isinstance(raw, list):
+            raise ConfigError("workspace.allowedRoots must be an array of strings.")
+        for index, item in enumerate(raw):
+            if not isinstance(item, str):
+                raise ConfigError(f"workspace.allowedRoots[{index}] must be a string.")
+            if item.strip():
+                values.append(item.strip())
+    env = os.environ.get("COVEN_ALLOWED_WORKSPACE_ROOTS")
+    if env:
+        values.extend(item for item in env.split(os.pathsep) if item.strip())
+    roots = []
+    for value in values:
+        root = Path(value).expanduser()
+        try:
+            root = root.resolve()
+        except OSError:
+            root = root.absolute()
+        roots.append(root)
+    return tuple(roots)

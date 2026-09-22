@@ -51,12 +51,14 @@ class ChatPayloadHermesAdapter(HermesAdapter):
         super().__init__(store, hermes_config())
         self.payload = payload
         self.calls: list[tuple[str, str]] = []
+        self.chat_payload = None
 
     def _request(self, method: str, path: str, payload=None, **_kwargs):
         self.calls.append((method, path))
         if path == "/api/sessions":
             return {"id": "hermes-session-1"}
         if path == "/api/sessions/hermes-session-1/chat":
+            self.chat_payload = payload
             if isinstance(self.payload, Exception):
                 raise self.payload
             return self.payload
@@ -94,6 +96,45 @@ class RunSubmissionHermesAdapter(HermesAdapter):
             self.submission_headers = headers
             return {"Idempotency-Replayed": "false"}, {"run_id": "run-123", "status": "running", "session_id": "session-task"}
         return {}, self._request(method, path, payload, timeout=timeout)
+
+
+class FlakyRunSubmissionHermesAdapter(RunSubmissionHermesAdapter):
+    def __init__(self, store: CovenStore):
+        super().__init__(store)
+        self.fail_next_submission = True
+        self.submission_attempts = 0
+
+    def _request_with_headers(self, method: str, path: str, payload=None, *, headers=None, timeout=20):
+        if method == "POST" and path == "/v1/runs":
+            self.submission_attempts += 1
+            self.submission_payload = payload
+            self.submission_headers = headers
+            if self.fail_next_submission:
+                self.fail_next_submission = False
+                raise AdapterError("lost response", code="hermes_timeout")
+            return {"Idempotency-Replayed": "true"}, {"run_id": "run-recovered", "status": "running", "session_id": "session-task"}
+        return {}, self._request(method, path, payload, timeout=timeout)
+
+    def _request(self, method: str, path: str, payload=None, **_kwargs):
+        if path == "/v1/runs/run-recovered":
+            return {
+                "run_id": "run-recovered",
+                "session_id": "session-task",
+                "status": "completed",
+                "output": "Recovered without duplicating local work.",
+            }
+        return super()._request(method, path, payload, **_kwargs)
+
+
+class LimitedCapabilityHermesAdapter(RunSubmissionHermesAdapter):
+    def __init__(self, store: CovenStore, features: dict[str, bool]):
+        super().__init__(store)
+        self.features = features
+
+    def _request(self, method: str, path: str, payload=None, **_kwargs):
+        if path == "/v1/capabilities":
+            return {"features": self.features}
+        return super()._request(method, path, payload, **_kwargs)
 
 
 class AgentAdapterTests(unittest.TestCase):
@@ -151,6 +192,16 @@ class AgentAdapterTests(unittest.TestCase):
 
             self.assertEqual(result.messages[-1]["text"], long_reply)
 
+    def test_hermes_chat_sends_role_instructions(self):
+        with TemporaryDirectory() as tmp, patch.dict("os.environ", {"HERMES_TEST_KEY": "secret"}):
+            store = CovenStore(Path(tmp), PROFILE_PATH)
+            adapter = ChatPayloadHermesAdapter(store, {"message": "routed"})
+
+            adapter.send_message("circe", "hello")
+
+            self.assertIn("You are Circe, builder", adapter.chat_payload["instructions"])
+            self.assertEqual(adapter.chat_payload["input"], "hello")
+
     def test_hermes_rejects_oversized_user_input_before_dispatch(self):
         with TemporaryDirectory() as tmp, patch.dict("os.environ", {"HERMES_TEST_KEY": "secret"}):
             store = CovenStore(Path(tmp), PROFILE_PATH)
@@ -202,9 +253,91 @@ class AgentAdapterTests(unittest.TestCase):
             self.assertEqual(result.task["runtime"]["provider"], "openai")
             self.assertEqual(result.task["usage"]["total_tokens"], 42)
             self.assertEqual(result.task["artifacts"][0]["path"], "C:/CovenTest/out.txt")
+            self.assertEqual(result.task["artifacts"][0]["state"], "reported")
             self.assertEqual(adapter.submission_headers["Idempotency-Key"], "coven-test-key")
             self.assertIn("Coven task: Build a fixture", adapter.submission_payload["input"])
             self.assertIn("You are Circe, builder", adapter.submission_payload["instructions"])
+
+    def test_lost_submission_response_can_be_recovered_without_duplicate_local_task(self):
+        with TemporaryDirectory() as tmp, patch.dict("os.environ", {"HERMES_TEST_KEY": "secret"}):
+            store = CovenStore(Path(tmp), PROFILE_PATH)
+            adapter = FlakyRunSubmissionHermesAdapter(store)
+            body = {
+                "assignee": "circe",
+                "title": "Build a fixture",
+                "instructions": "Write a tiny test file.",
+                "priority": "high",
+                "routeMode": "api",
+                "idempotencyKey": "coven-lost-key",
+            }
+
+            with self.assertRaises(AdapterError) as caught:
+                adapter.create_task(body)
+            self.assertEqual(caught.exception.code, "hermes_timeout")
+
+            unresolved = store.unresolved_submission_candidates()
+            self.assertEqual(len(unresolved), 1)
+            recovered = adapter.recover_submission(unresolved[0]["id"])
+
+            self.assertEqual(adapter.submission_attempts, 2)
+            self.assertEqual(recovered.task["status"], "completed")
+            self.assertEqual(recovered.task["hermes"]["runId"], "run-recovered")
+            self.assertEqual(len(store.snapshot(namespace="live")["tasks"]), 1)
+
+    def test_duplicate_idempotency_key_with_different_input_is_rejected_locally(self):
+        with TemporaryDirectory() as tmp, patch.dict("os.environ", {"HERMES_TEST_KEY": "secret"}):
+            store = CovenStore(Path(tmp), PROFILE_PATH)
+            adapter = FlakyRunSubmissionHermesAdapter(store)
+            with self.assertRaises(AdapterError):
+                adapter.create_task(
+                    {
+                        "assignee": "circe",
+                        "title": "Build one",
+                        "instructions": "First payload.",
+                        "priority": "normal",
+                        "routeMode": "api",
+                        "idempotencyKey": "conflict-key",
+                    }
+                )
+
+            with self.assertRaises(AdapterError) as caught:
+                adapter.create_task(
+                    {
+                        "assignee": "circe",
+                        "title": "Build two",
+                        "instructions": "Second payload.",
+                        "priority": "normal",
+                        "routeMode": "api",
+                        "idempotencyKey": "conflict-key",
+                    }
+                )
+
+            self.assertEqual(caught.exception.code, "idempotency_conflict")
+            self.assertEqual(len(store.snapshot(namespace="live")["tasks"]), 1)
+
+    def test_stop_and_approval_require_advertised_capabilities(self):
+        with TemporaryDirectory() as tmp, patch.dict("os.environ", {"HERMES_TEST_KEY": "secret"}):
+            store = CovenStore(Path(tmp), PROFILE_PATH)
+            adapter = LimitedCapabilityHermesAdapter(store, {"run_submission": True})
+            task = store.create_live_task(
+                assignee="circe",
+                title="Running work",
+                instructions="Do it.",
+                priority="normal",
+                idempotency_key="cap-key",
+                session_id="session-task",
+                requested_runtime={},
+                request_payload={"input": "work", "session_id": "session-task", "instructions": "role"},
+            )
+            store.record_live_submission(task["id"], run_id="run-123", remote_status="running", session_id="session-task")
+
+            with self.assertRaises(AdapterError) as stopped:
+                adapter.stop_task(task["id"])
+            self.assertEqual(stopped.exception.code, "hermes_run_stop_unavailable")
+
+            with self.assertRaises(AdapterError) as approved:
+                adapter.resolve_approval(task["id"], "once")
+            self.assertEqual(approved.exception.code, "hermes_approval_unavailable")
 
     def test_live_task_validation_happens_before_remote_probe(self):
         with TemporaryDirectory() as tmp, patch.dict("os.environ", {"HERMES_TEST_KEY": "secret"}):

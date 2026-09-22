@@ -1,13 +1,13 @@
 # Integration Note
 
-Checked on 2026-09-20 against the current public documentation and the local development environment.
+Checked on 2026-09-22 against public documentation and the local development environment.
 
 ## Local Inspection
 
-- Repository started empty with no commits and no remote configured.
+- Repository now contains the Coven Python/static-web desktop app on top of the approved-reference visual pass.
 - `hermes` was not installed on PATH in the development environment.
 - `ollama` was installed, but the local service could not be reached from the sandboxed development shell.
-- Node/npm were not on PATH. The app therefore uses Python stdlib plus static browser assets, avoiding a build step and dependency install.
+- Node/npm were not on the default PATH. Syntax checks use the bundled Codex Node runtime when available. The app still uses Python stdlib plus static browser assets, avoiding an app build step.
 
 ## Documentation Findings
 
@@ -19,17 +19,18 @@ Checked on 2026-09-20 against the current public documentation and the local dev
 
 ## Chosen Adapter Path
 
-The current repo did not contain a Hermes dashboard extension or any app stack to preserve, and Hermes was unavailable locally. The smallest reversible architecture is:
+Hermes, Office, Microsoft Graph and GovDash access were unavailable locally, so Coven keeps each external surface behind an explicit adapter/status boundary:
 
 1. Static browser UI for the sanctuary, dialogue, journal, controls, and failure scene.
-2. Python loopback adapter server that owns secrets, runtime inspection, durable local presentation state, and future Hermes API/CLI integration.
+2. Python loopback adapter server that owns secrets, runtime inspection, durable local presentation state, Hermes API calls, and integration readiness checks.
 3. Explicit demo fixture mode for interface and failure-scene testing, isolated from live runtime work.
+4. Configured workspace roots for artifact inspection; model-reported file claims are never accepted as verified evidence without local inspection.
 
-The browser never receives provider secrets and cannot execute arbitrary shell commands. Live task dispatch fails visibly until the Hermes adapter is completed and verified.
+The browser never receives provider secrets and cannot execute arbitrary shell commands. Live task dispatch fails visibly unless Hermes is configured and advertises the required Runs API capabilities.
 
 ## Live Adapter Contract
 
-The future Hermes adapter should expose structured events with at least:
+The Hermes adapter persists and exposes structured task state with at least:
 
 - `id`
 - `taskId`
@@ -46,9 +47,17 @@ The future Hermes adapter should expose structured events with at least:
 
 The Ophelia scene may trigger only when `status == failed`, `terminal == true`, `retryPolicyExhausted == true`, and `outcomeKind == terminal_failure`. Recoverable tool errors, user cancellations, pending approvals, needs-input states, missing configuration, and disconnections are non-terminal presentation states.
 
+## External Integration Contract
+
+- Office automation is disabled by default and may only become operational in an interactive Windows session with a configured bridge. Native mutations fail closed when the bridge is unavailable.
+- Microsoft Graph configuration reports cloud endpoint, tenant ID, client ID and token-env readiness. Coven does not mint or store tokens in this branch.
+- GovDash supports explicit route states for SharePoint exchange, browser verification and blocked API writes until tenant-specific endpoints are verified.
+- Tool schemas are advertised as capability metadata; they are not evidence that a live external system was exercised.
+
 ## Gaps
 
-- Documented Hermes dashboard plugin routes and any conversation/session interface must be rechecked against the exact installed Hermes version on Windows before live dispatch is wired.
+- Documented Hermes dashboard/plugin routes and any conversation/session interface must be rechecked against the exact installed Hermes version on Windows before production acceptance.
 - Authentication behavior for dashboard/plugin routes must be verified; loopback alone is not an authentication boundary.
 - Local transcription must be selected after target hardware inspection and benchmark.
 - OpenAI API model identifiers must remain configuration values.
+- Native Office, Microsoft Graph and GovDash flows require target-machine/tenant validation before release claims.

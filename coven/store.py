@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import threading
 import uuid
 from copy import deepcopy
@@ -57,7 +58,7 @@ class CovenStore:
 
     def _new_state(self) -> dict[str, Any]:
         return {
-            "version": 3,
+            "version": 4,
             "createdAt": utc_now(),
             "preferences": {
                 "cinematicsEnabled": True,
@@ -79,6 +80,7 @@ class CovenStore:
             "tasks": [],
             "conversations": {},
             "runtimeSessions": {},
+            "operations": [],
             "events": [],
             "cinematics": {"shownEventIds": [], "skippedEventIds": []},
         }
@@ -141,6 +143,7 @@ class CovenStore:
                 ]
             },
             "runtimeSessions": {},
+            "operations": [],
             "events": [],
             "cinematics": {"shownEventIds": [], "skippedEventIds": []},
         }
@@ -196,7 +199,7 @@ class CovenStore:
         }
 
     def _migrate_state(self, state: dict[str, Any]) -> dict[str, Any]:
-        if state.get("version") in {2, 3} and isinstance(state.get("namespaces"), dict):
+        if state.get("version") in {2, 3, 4} and isinstance(state.get("namespaces"), dict):
             changed = False
             for namespace in ("demo", "live"):
                 if namespace not in state["namespaces"]:
@@ -204,7 +207,7 @@ class CovenStore:
                     changed = True
                 scope = state["namespaces"][namespace]
                 defaults = self._empty_namespace(namespace)
-                for key in ("tasks", "conversations", "runtimeSessions", "events", "cinematics"):
+                for key in ("tasks", "conversations", "runtimeSessions", "operations", "events", "cinematics"):
                     if key not in scope:
                         scope[key] = deepcopy(defaults[key])
                         changed = True
@@ -219,8 +222,8 @@ class CovenStore:
             if "preferences" not in state:
                 state["preferences"] = self._preferences_from(state)
                 changed = True
-            if state.get("version") != 3:
-                state["version"] = 3
+            if state.get("version") != 4:
+                state["version"] = 4
                 changed = True
             return deepcopy(state) if changed else state
 
@@ -228,6 +231,7 @@ class CovenStore:
         demo = migrated["namespaces"]["demo"]
         demo["tasks"] = deepcopy(state.get("tasks", []))
         demo["conversations"] = deepcopy(state.get("conversations", {}))
+        demo["operations"] = []
         demo["events"] = deepcopy(state.get("events", []))
         demo["cinematics"] = deepcopy(state.get("cinematics", {"shownEventIds": [], "skippedEventIds": []}))
         migrated["preferences"] = self._preferences_from(state)
@@ -258,9 +262,18 @@ class CovenStore:
                     "runId": None,
                     "sessionId": None,
                     "idempotencyKey": None,
+                    "payloadHash": None,
+                    "requestPayload": None,
+                    "executionScope": {},
                     "lastReconciledAt": None,
                 }
                 changed = True
+            else:
+                hermes = task["hermes"]
+                for key, value in {"payloadHash": None, "requestPayload": None, "executionScope": {}}.items():
+                    if key not in hermes:
+                        hermes[key] = value
+                        changed = True
         return changed
 
     def _preferences_from(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -461,6 +474,8 @@ class CovenStore:
         idempotency_key: str,
         session_id: str | None,
         requested_runtime: dict[str, Any],
+        request_payload: dict[str, Any],
+        execution_scope: dict[str, Any] | None = None,
         parent_task_id: str | None = None,
         attempt: int = 1,
     ) -> dict[str, Any]:
@@ -473,6 +488,7 @@ class CovenStore:
             raise ValueError("Task title is required.")
         if not idempotency_key:
             raise ValueError("Idempotency key is required.")
+        payload_hash = canonical_payload_hash(request_payload)
 
         now = utc_now()
         task_id = f"task-{uuid.uuid4().hex[:12]}"
@@ -506,6 +522,9 @@ class CovenStore:
                 "runId": None,
                 "sessionId": session_id,
                 "idempotencyKey": idempotency_key,
+                "payloadHash": payload_hash,
+                "requestPayload": deepcopy(request_payload),
+                "executionScope": deepcopy(execution_scope or {}),
                 "lastReconciledAt": None,
             },
             "timeline": [
@@ -519,7 +538,24 @@ class CovenStore:
         }
         with self._lock:
             state = self._read()
+            existing = self._task_for_operation_key(state, idempotency_key)
+            if existing is not None:
+                existing_hash = existing.get("hermes", {}).get("payloadHash")
+                if existing_hash != payload_hash:
+                    raise ValueError("A task with this idempotency key already exists for different input.")
+                return deepcopy(existing)
             state["namespaces"]["live"]["tasks"].insert(0, task)
+            state["namespaces"]["live"].setdefault("operations", []).append(
+                {
+                    "operationKey": idempotency_key,
+                    "taskId": task_id,
+                    "attemptId": task["attemptId"],
+                    "payloadHash": payload_hash,
+                    "state": "prepared",
+                    "createdAt": now,
+                    "updatedAt": now,
+                }
+            )
             self._write(state)
             return deepcopy(task)
 
@@ -543,6 +579,20 @@ class CovenStore:
                     if task.get("mode") == "live"
                     and task.get("hermes", {}).get("runId")
                     and task.get("status") not in TERMINAL_TASK_STATUSES
+                ]
+            )
+
+    def unresolved_submission_candidates(self) -> list[dict[str, Any]]:
+        with self._lock:
+            state = self._read()
+            tasks = state["namespaces"]["live"]["tasks"]
+            return deepcopy(
+                [
+                    task
+                    for task in tasks
+                    if task.get("mode") == "live"
+                    and not task.get("hermes", {}).get("runId")
+                    and task.get("status") in {"queued", "unknown", "disconnected"}
                 ]
             )
 
@@ -639,6 +689,11 @@ class CovenStore:
                 raise KeyError(task_id)
             now = utc_now()
             previous_status = task.get("status")
+            if previous_status in TERMINAL_TASK_STATUSES and status is not None and status != previous_status:
+                self._append_ignored_transition(task, status, timeline_message or latest_update or "Stale runtime update ignored.", now)
+                task["updatedAt"] = now
+                self._write(state)
+                return deepcopy(task)
             if status is not None:
                 task["status"] = status
                 if status in {"running", "waiting_for_approval"} and not task.get("startedAt"):
@@ -701,6 +756,9 @@ class CovenStore:
                     )
                     task["timeline"] = timeline[-TASK_EVENT_LIMIT:]
             task["updatedAt"] = now
+            operation_key = task.get("hermes", {}).get("idempotencyKey")
+            if operation_key:
+                self._update_operation_record(state["namespaces"]["live"], operation_key, task)
             if task.get("status") == "failed":
                 task.setdefault("retryPolicy", {})["exhausted"] = True
                 self._record_terminal_failure_event(state["namespaces"]["live"], task)
@@ -758,6 +816,48 @@ class CovenStore:
         if mapped in TERMINAL_TASK_STATUSES | ACTIVE_TASK_STATUSES | {"needs_input"}:
             return mapped
         return "unknown"
+
+    def _task_for_operation_key(self, state: dict[str, Any], operation_key: str) -> dict[str, Any] | None:
+        for task in state["namespaces"]["live"].get("tasks", []):
+            if task.get("hermes", {}).get("idempotencyKey") == operation_key:
+                return task
+        return None
+
+    def _update_operation_record(self, scope: dict[str, Any], operation_key: str, task: dict[str, Any]) -> None:
+        operations = scope.setdefault("operations", [])
+        record = next((item for item in operations if item.get("operationKey") == operation_key), None)
+        if record is None:
+            record = {"operationKey": operation_key, "createdAt": task.get("createdAt") or utc_now()}
+            operations.append(record)
+        record.update(
+            {
+                "taskId": task["id"],
+                "attemptId": task["attemptId"],
+                "payloadHash": task.get("hermes", {}).get("payloadHash"),
+                "runId": task.get("hermes", {}).get("runId"),
+                "state": task.get("status"),
+                "updatedAt": utc_now(),
+            }
+        )
+
+    def _append_ignored_transition(self, task: dict[str, Any], incoming_status: str, message: str, timestamp: str) -> None:
+        timeline = task.setdefault("timeline", [])
+        event_id = f"stale-{incoming_status}-{len(timeline)}"
+        if timeline and timeline[-1].get("kind") == "stale_ignored" and incoming_status in timeline[-1].get("message", ""):
+            return
+        timeline.append(
+            {
+                "id": event_id,
+                "kind": "stale_ignored",
+                "message": self._bounded_text(
+                    f"Ignored stale {incoming_status} update after terminal state {task.get('status')}: {message}",
+                    "Timeline message",
+                    max_length=800,
+                ),
+                "timestamp": timestamp,
+            }
+        )
+        task["timeline"] = timeline[-TASK_EVENT_LIMIT:]
 
     def _extract_run_timeline(self, payload: dict[str, Any]) -> list[dict[str, str]]:
         raw_events = payload.get("events")
@@ -979,3 +1079,8 @@ class CovenStore:
         if len(value) > max_length:
             raise ValueError(f"{field} must be {max_length} characters or fewer.")
         return value
+
+
+def canonical_payload_hash(payload: dict[str, Any]) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()

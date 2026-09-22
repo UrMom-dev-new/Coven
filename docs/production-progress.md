@@ -1,10 +1,38 @@
 # Production Progress
 
-Last updated: 2026-09-21
+Last updated: 2026-09-22
 
-Base commit for this continuation pass: `e0df4ffe1fb528d7e977bf5af5cd218b33f0f0bd`
+Base commit for this continuation pass: `a90ffb78272288e16c3b32616d37fa05178a2fc8`
 
 ## Implemented In This Continuation Pass
+
+- Hardened live Hermes submission reliability:
+  - live task records now persist the exact `POST /v1/runs` payload before dispatch
+  - repeated submissions with the same idempotency key and same payload reuse the existing local task
+  - repeated submissions with the same idempotency key and different payload fail before remote dispatch
+  - unresolved/lost-response submissions can be recovered through the stored payload and idempotency key
+  - late non-terminal runtime updates cannot overwrite a completed/failed/interrupted task
+- Moved live task reconciliation out of task-list reads:
+  - `GET /api/tasks` and `GET /api/tasks/{id}` now return local cached state quickly
+  - a background reconciler polls live non-terminal Hermes runs when live mode is active
+  - `/api/status` reports the reconciler's last run/error snapshot
+- Added independent artifact evidence inspection:
+  - model-returned artifact claims are marked `reported` until Coven inspects them
+  - files are inspected only under configured workspace roots
+  - size/hash mismatches and malformed expected metadata fail closed
+  - `/api/tasks/{id}/validate-artifacts` and `files.validate_artifacts` expose manual validation
+- Added Office, Microsoft Graph and GovDash integration boundaries:
+  - `config/coven.example.json` documents `workspace`, `office`, `microsoftGraph` and `govdash`
+  - `/api/integrations/status` reports configured/operational/blocked state and exposed tool schemas
+  - Office operation requests fail closed when the Windows bridge is unavailable
+  - Microsoft Graph reports cloud endpoint, tenant/client/token readiness and does not store credentials
+  - GovDash SharePoint/API/browser routes are surfaced without inventing unverified write endpoints
+- Routed live chat through the same role/model-routing path used for live tasks.
+- Added frontend controls for unresolved submission recovery, artifact validation and integration readiness summaries.
+- Added `docs/integration-capability-matrix.md` and `docs/office-govdash-setup.md`.
+- Added tests for idempotent local task reuse/conflict, lost-response recovery, stale update rejection, artifact validation, integration status boundaries and integration config validation.
+
+## Previously Implemented In The Hermes Runs Pass
 
 - Implemented the live Hermes Runs API task path behind capability checks:
   - `POST /v1/runs` submission with `Idempotency-Key`
@@ -60,7 +88,7 @@ Base commit for this continuation pass: `e0df4ffe1fb528d7e977bf5af5cd218b33f0f0b
 
 ## Verified
 
-- `python3 -m unittest discover -s tests` ran 45 tests and passed.
+- `python3 -m unittest discover -s tests` ran 63 tests and passed.
 - `python3 -m compileall coven tests` passed.
 - `/Users/nefarioususer/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check public/src/app.js` passed.
 - `/Users/nefarioususer/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check public/src/game.js` passed.
@@ -89,19 +117,20 @@ Base commit for this continuation pass: `e0df4ffe1fb528d7e977bf5af5cd218b33f0f0b
   - `HEAD /assets/reference/coven-approved-reference.png` returned `200 image/png` with cacheable image headers
   - `HEAD /styles.css` returned `200 text/css` with `Cache-Control: no-store`
 - Headless desktop self-test passed from the source tree:
-  - `python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-final.log`
+  - `python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-office-govdash.log`
   - local desktop service booted
   - session bootstrap returned `201`
   - authenticated app shell returned approved-reference UI markers
   - seeded demo tasks were available
   - approved reference PNG and CSS `HEAD` checks passed
-- New targeted unit coverage includes Hermes empty chat responses, long assistant output persistence, pre-dispatch validation, uncertain delivery state, live run submission/reconciliation shape, runtime API readiness gates, live terminal failure event de-duplication and installer workflow markers.
+- New targeted unit coverage includes Hermes empty chat responses, long assistant output persistence, pre-dispatch validation, uncertain delivery state, live run submission/reconciliation shape, lost-response recovery, idempotency conflict rejection, stale terminal-update protection, runtime API readiness gates, live terminal failure event de-duplication, artifact inspection, integration status/config validation and installer workflow markers.
 
 ## Still Blocked Or Incomplete
 
 - Windows/WebView2 runtime rendering and high-DPI visual acceptance have not been verified in this macOS workspace.
 - Live Hermes task creation, retry, cancellation, approvals and artifact reconciliation are implemented against the documented Runs API and deterministic mocks, but live proof remains blocked because Hermes, provider credentials and an authorized disposable workspace were not available here.
 - Persistent SSE consumption from `/v1/runs/{run_id}/events` still requires live runtime validation before production acceptance.
+- Native Office document mutation/export, Microsoft Graph workbook/file operations and GovDash exchange flows are now represented as configured/blocked/operational integration surfaces, but remain blocked until a Windows machine with Office, tenant credentials and GovDash entitlement is available.
 - Voice is implemented through browser/WebView speech APIs when exposed; microphone permission, Windows/WebView2 speech recognition, local/API transcription, installed voices and hardware transcription quality remain unverified here.
 - PyInstaller bundle, Inno Setup installer, update flow, signing and Windows CI artifacts remain unverified in this environment. The Windows workflow now includes a packaged executable self-test and installer compile/upload, but that workflow has not been executed from this macOS workspace.
 - Full production acceptance requires a Windows machine with WebView2, Hermes, microphone access, provider credentials and the target Dell-class hardware.

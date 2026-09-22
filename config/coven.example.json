@@ -27,6 +27,30 @@
     "allowApiTranscription": false,
     "allowApiSpeech": false
   },
+  "workspace": {
+    "allowedRoots": [
+      "%USERPROFILE%/Documents/CovenWork"
+    ]
+  },
+  "office": {
+    "enabled": false,
+    "bridgeExecutable": "",
+    "operationTimeoutSeconds": 60
+  },
+  "microsoftGraph": {
+    "enabled": false,
+    "cloud": "commercial",
+    "tenantId": "",
+    "clientId": "",
+    "tokenEnvironmentVariable": "COVEN_GRAPH_ACCESS_TOKEN"
+  },
+  "govdash": {
+    "enabled": false,
+    "route": "sharepoint",
+    "baseUrl": "",
+    "sharePointRoot": "",
+    "browserProfileDir": "%LOCALAPPDATA%/Coven/GovDashBrowser"
+  },
   "cinematics": {
     "failureScene": true,
     "reducedMotionMode": "tableau",

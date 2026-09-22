@@ -31,6 +31,8 @@ const state = {
   refreshTimer: null,
   refreshInFlight: false,
   refreshBackoffMs: 1500,
+  assigningTask: false,
+  pendingTaskKey: null,
 };
 
 const positions = {
@@ -62,13 +64,29 @@ function renderOnboarding() {
     ["Hermes API", hermesApiSummary()],
     ["Ollama", state.status.ollama?.operational ? "Local service reachable." : "Local service unavailable."],
     ["OpenAI", state.status.openai?.configured ? "API key environment variable found." : "API key not configured."],
+    ["Office", integrationSummary("office")],
+    ["Microsoft", integrationSummary("microsoftGraph")],
+    ["GovDash", integrationSummary("govdash")],
     ["Hardware", `${state.status.hardware?.system || "unknown"} ${state.status.hardware?.machine || ""}, ${state.status.hardware?.memory || "memory unknown"}`],
-    ["Workspace", "Workspace selection is pending the full desktop onboarding flow."],
+    ["Workspace", workspaceSummary()],
     ["Voice", "Text-first path active; voice setup is a later gate."],
   ];
   for (const [title, text] of items) {
     host.append(node("div", { className: "check-item" }, [node("b", { text: title }), node("span", { text })]));
   }
+}
+
+function integrationSummary(name) {
+  const item = state.status?.integrations?.[name];
+  if (!item?.configured) return "Not configured.";
+  if (item.operational) return "Operational.";
+  return (item.notes && item.notes[0]) || "Configured but blocked.";
+}
+
+function workspaceSummary() {
+  const workspace = state.status?.integrations?.workspace;
+  if (workspace?.operational) return `${workspace.allowedRoots?.length || 0} permitted root(s).`;
+  return "No permitted workspace roots configured.";
 }
 
 function hermesApiSummary() {
@@ -398,6 +416,16 @@ function renderTaskDetail(task) {
 function taskActions(task) {
   const actions = [];
   const active = ["queued", "running", "waiting_for_approval", "stopping", "unknown", "disconnected"].includes(task.status);
+  if (task.mode === "live" && !task.hermes?.runId && ["queued", "unknown", "disconnected"].includes(task.status)) {
+    const recover = node("button", { type: "button", text: "Recover submission" });
+    recover.addEventListener("click", () => recoverSubmission(task.id));
+    actions.push(recover);
+  }
+  if (task.mode === "live" && Array.isArray(task.artifacts) && task.artifacts.length) {
+    const validate = node("button", { type: "button", className: "secondary-button", text: "Validate artifacts" });
+    validate.addEventListener("click", () => validateArtifacts(task.id));
+    actions.push(validate);
+  }
   if (task.mode === "live" && active && task.hermes?.runId && task.status !== "stopping") {
     const stop = node("button", { type: "button", text: "Request stop" });
     stop.addEventListener("click", () => stopTask(task.id));
@@ -445,8 +473,9 @@ function artifactList(items) {
     }
     if (item && typeof item === "object") {
       const path = item.path || item.uri || item.name || "artifact";
-      const verified = item.exists === true || item.verified === true ? "verified" : "unverified";
-      list.append(node("li", { text: `${path} (${verified})` }));
+      const verified = item.state || (item.exists === true || item.verified === true ? "reported by runtime" : "reported");
+      const extra = item.sha256 ? `, sha256 ${item.sha256.slice(0, 12)}` : "";
+      list.append(node("li", { text: `${path} (${verified}${extra})` }));
       return;
     }
     list.append(node("li", { text: String(item) }));
@@ -507,7 +536,12 @@ async function sendMessage(event) {
 
 async function assignTask(event) {
   event.preventDefault();
+  if (state.assigningTask) return;
   const assignee = state.selectedWitch;
+  state.assigningTask = true;
+  state.pendingTaskKey = state.pendingTaskKey || newOperationKey();
+  const submitButton = event.submitter || document.querySelector("#taskForm button[type='submit']");
+  if (submitButton) submitButton.disabled = true;
   try {
     const payload = await postJson("/api/tasks", {
       assignee,
@@ -517,18 +551,27 @@ async function assignTask(event) {
       routeMode: $("routeMode").value,
       provider: $("taskProvider").value,
       model: $("taskModel").value,
+      idempotencyKey: state.pendingTaskKey,
     });
-    state.tasks.unshift(payload.task);
-    state.selectedTask = payload.task.id;
+    replaceTask(payload.task);
     $("taskTitle").value = "";
     $("taskInstructions").value = "";
     $("taskProvider").value = "";
     $("taskModel").value = "";
     renderTasks();
     setNotice("Task queued. The journal will update as runtime events arrive.", "info");
+    state.pendingTaskKey = null;
   } catch (error) {
     setNotice(error.message, "error");
+  } finally {
+    state.assigningTask = false;
+    if (submitButton) submitButton.disabled = false;
   }
+}
+
+function newOperationKey() {
+  if (window.crypto?.randomUUID) return `coven-${window.crypto.randomUUID()}`;
+  return `coven-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 async function retryTask(taskId) {
@@ -550,6 +593,28 @@ async function stopTask(taskId) {
     replaceTask(payload.task);
     renderTasks();
     setNotice("Stop requested. Coven will keep reconciling the run until Hermes confirms the terminal state.", "info");
+  } catch (error) {
+    setNotice(error.message, "error");
+  }
+}
+
+async function recoverSubmission(taskId) {
+  try {
+    const payload = await postJson(`/api/tasks/${encodeURIComponent(taskId)}/recover-submission`, {});
+    replaceTask(payload.task);
+    renderTasks();
+    setNotice("Submission recovery replayed the original request with the retained idempotency key.", "info");
+  } catch (error) {
+    setNotice(error.message, "error");
+  }
+}
+
+async function validateArtifacts(taskId) {
+  try {
+    const payload = await postJson(`/api/tasks/${encodeURIComponent(taskId)}/validate-artifacts`, {});
+    replaceTask(payload.task);
+    renderTasks();
+    setNotice("Artifact claims were inspected against configured workspace roots.", "info");
   } catch (error) {
     setNotice(error.message, "error");
   }

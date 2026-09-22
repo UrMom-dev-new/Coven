@@ -13,6 +13,13 @@ class StoreTests(unittest.TestCase):
     def make_store(self, tmp_dir: str) -> CovenStore:
         return CovenStore(Path(tmp_dir), PROFILE_PATH)
 
+    def live_payload(self, *, title: str = "Diagnose failure", instructions: str = "Inspect the broken run.") -> dict:
+        return {
+            "input": f"Coven task: {title}\n\n{instructions}",
+            "session_id": "session-1",
+            "instructions": "You are Ophelia.",
+        }
+
     def test_demo_failure_is_persisted_before_cinematic(self):
         with TemporaryDirectory() as tmp:
             store = self.make_store(tmp)
@@ -124,6 +131,7 @@ class StoreTests(unittest.TestCase):
                 idempotency_key="coven-key-1",
                 session_id="session-1",
                 requested_runtime={"routeMode": "api", "provider": "openai", "model": "gpt-test"},
+                request_payload=self.live_payload(),
             )
             store.record_live_submission(task["id"], run_id="run-1", remote_status="running", session_id="session-1")
 
@@ -158,6 +166,88 @@ class StoreTests(unittest.TestCase):
             )
             self.assertEqual(len(pending), 1)
             self.assertEqual(pending[0]["taskId"], task["id"])
+
+    def test_live_task_idempotency_key_reuses_same_payload(self):
+        with TemporaryDirectory() as tmp:
+            store = self.make_store(tmp)
+            payload = self.live_payload(title="Prepare brief", instructions="Draft the brief.")
+            first = store.create_live_task(
+                assignee="circe",
+                title="Prepare brief",
+                instructions="Draft the brief.",
+                priority="normal",
+                idempotency_key="same-key",
+                session_id="session-1",
+                requested_runtime={"routeMode": "api", "provider": "openai", "model": "gpt-test"},
+                request_payload=payload,
+            )
+            second = store.create_live_task(
+                assignee="circe",
+                title="Prepare brief",
+                instructions="Draft the brief.",
+                priority="normal",
+                idempotency_key="same-key",
+                session_id="session-1",
+                requested_runtime={"routeMode": "api", "provider": "openai", "model": "gpt-test"},
+                request_payload=payload,
+            )
+
+            self.assertEqual(second["id"], first["id"])
+            self.assertEqual(len(store.snapshot(namespace="live")["tasks"]), 1)
+
+    def test_live_task_idempotency_key_rejects_different_payload(self):
+        with TemporaryDirectory() as tmp:
+            store = self.make_store(tmp)
+            store.create_live_task(
+                assignee="circe",
+                title="Prepare brief",
+                instructions="Draft the brief.",
+                priority="normal",
+                idempotency_key="same-key",
+                session_id="session-1",
+                requested_runtime={"routeMode": "api", "provider": "openai", "model": "gpt-test"},
+                request_payload=self.live_payload(title="Prepare brief", instructions="Draft the brief."),
+            )
+
+            with self.assertRaises(ValueError):
+                store.create_live_task(
+                    assignee="circe",
+                    title="Prepare brief",
+                    instructions="Draft a different brief.",
+                    priority="normal",
+                    idempotency_key="same-key",
+                    session_id="session-1",
+                    requested_runtime={"routeMode": "api", "provider": "openai", "model": "gpt-test"},
+                    request_payload=self.live_payload(title="Prepare brief", instructions="Draft a different brief."),
+                )
+
+    def test_terminal_live_task_ignores_late_running_update(self):
+        with TemporaryDirectory() as tmp:
+            store = self.make_store(tmp)
+            task = store.create_live_task(
+                assignee="ophelia",
+                title="Complete once",
+                instructions="Finish the work.",
+                priority="normal",
+                idempotency_key="terminal-key",
+                session_id="session-1",
+                requested_runtime={"routeMode": "api", "provider": "openai", "model": "gpt-test"},
+                request_payload=self.live_payload(title="Complete once", instructions="Finish the work."),
+            )
+            store.record_live_submission(task["id"], run_id="run-1", remote_status="running", session_id="session-1")
+            completed = store.update_live_task_from_run(
+                task["id"],
+                {"run_id": "run-1", "status": "completed", "output": "Done."},
+            )
+            stale = store.update_live_task_from_run(
+                task["id"],
+                {"run_id": "run-1", "status": "running"},
+            )
+
+            self.assertEqual(completed["status"], "completed")
+            self.assertEqual(stale["status"], "completed")
+            self.assertEqual(stale["result"], "Done.")
+            self.assertEqual(stale["timeline"][-1]["kind"], "stale_ignored")
 
     def test_old_state_migrates_to_demo_with_backup(self):
         with TemporaryDirectory() as tmp:
