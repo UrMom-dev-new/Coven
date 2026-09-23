@@ -28,7 +28,7 @@ $InstallLog = Join-Path $env:TEMP "coven-installer-smoke.log"
 Remove-Item -Force $InstallLog -ErrorAction SilentlyContinue
 
 Write-Host "Installing Coven to $InstallDir"
-$InstallArgs = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/LOG=$InstallLog", "/DIR=$InstallDir")
+$InstallArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /LOG=""$InstallLog"" /DIR=""$InstallDir"""
 $Process = Start-Process -FilePath (Resolve-Path $Installer) -ArgumentList $InstallArgs -Wait -PassThru
 if ($Process.ExitCode -ne 0) {
   if (Test-Path $InstallLog) {
