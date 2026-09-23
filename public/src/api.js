@@ -24,3 +24,11 @@ export function postJson(path, payload) {
     body: JSON.stringify(payload),
   });
 }
+
+export function postBinary(path, body, headers = {}) {
+  return api(path, {
+    method: "POST",
+    headers,
+    body,
+  });
+}

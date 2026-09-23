@@ -93,3 +93,28 @@ Unverified gates:
 - Live Hermes execution, served-provider evidence and persistent SSE event streaming.
 - Windows/WebView2 visual interaction, PyInstaller artifact generation, installer installation/upgrade/uninstall and signing.
 - Microphone permissions, local/API transcription, installed Windows voices and Dell performance targets.
+
+## 2026-09-23 Local Voice Commands
+
+Implemented:
+
+- Local-only voice service boundary for whisper.cpp with runtime/model readiness checks.
+- Verified English Q5_1 model metadata and a manual runtime packaging manifest under `packaging/voice`.
+- Authenticated voice session endpoints for start, bounded WAV upload, status, cancellation, command examples and transcript interpretation.
+- WebView microphone capture that encodes 16 kHz mono WAV locally before submitting to the loopback service.
+- Deterministic local commands for witch selection, view navigation, journal task focus and speech playback stop.
+- Editable draft handling for addressed witch requests, GovDash/Office/document requests and free-form dictation.
+- Cancellation and stale worker-result protection so late transcripts cannot execute after the session is invalidated.
+
+Tested:
+
+- `python3 -m unittest discover -s tests` ran 75 tests.
+- `python3 -m compileall coven tests`.
+- Bundled Node `--check` passed for frontend modules.
+
+Unverified gates:
+
+- whisper.cpp runtime import and model install on Windows.
+- Windows/WebView2 microphone permission and capture behavior.
+- Transcription latency and accuracy on target hardware.
+- Installed Windows speech synthesis voice quality.

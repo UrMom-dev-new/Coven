@@ -12,6 +12,9 @@ from typing import Any
 VALID_PRIORITIES = {"low", "normal", "high"}
 VALID_QUALITIES = {"low", "balanced"}
 VALID_MOTION_MODES = {"full", "tableau", "off"}
+VALID_VOICE_INPUTS = {"push-to-talk", "click-to-toggle"}
+VALID_VOICE_ENGINES = {"whisper.cpp"}
+VALID_VOICE_MODEL_PROFILES = {"base.en-q5_1", "tiny.en-q5_1", "base.en-q5_0", "tiny.en-q5_0"}
 VALID_WITCH_ID = set("abcdefghijklmnopqrstuvwxyz0123456789_-")
 
 
@@ -51,6 +54,25 @@ class CinematicConfig:
 
 
 @dataclass(frozen=True)
+class VoiceConfig:
+    enabled: bool = True
+    default_input: str = "push-to-talk"
+    engine: str = "whisper.cpp"
+    model_profile: str = "base.en-q5_1"
+    language: str = "en"
+    microphone_id: str = "default"
+    inference_threads: int = 2
+    max_duration_seconds: int = 60
+    retain_audio: bool = False
+    runtime_executable: str = ""
+    runtime_dir: Path | None = None
+    model_dir: Path | None = None
+    max_audio_bytes: int = 12 * 1024 * 1024
+    allow_api_transcription: bool = False
+    allow_api_speech: bool = False
+
+
+@dataclass(frozen=True)
 class WorkspaceConfig:
     allowed_roots: tuple[Path, ...] = ()
 
@@ -86,6 +108,7 @@ class AppConfig:
     runtime: RuntimeConfig
     providers: ProviderConfig
     cinematics: CinematicConfig
+    voice: VoiceConfig = field(default_factory=VoiceConfig)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     office: OfficeConfig = field(default_factory=OfficeConfig)
     microsoft_graph: MicrosoftGraphConfig = field(default_factory=MicrosoftGraphConfig)
@@ -155,6 +178,7 @@ def load_app_config(path: Path | None = None) -> AppConfig:
     providers = _object(data.get("providers", {}), "providers")
     ollama = _object(providers.get("ollama", {}), "providers.ollama")
     openai = _object(providers.get("openai", {}), "providers.openai")
+    voice = _object(data.get("voice", {}), "voice")
     cinematics = _object(data.get("cinematics", {}), "cinematics")
     workspace = _object(data.get("workspace", {}), "workspace")
     office = _object(data.get("office", {}), "office")
@@ -178,11 +202,24 @@ def load_app_config(path: Path | None = None) -> AppConfig:
 
     data_dir = None
     if "dataDir" in server:
-        data_dir = Path(_string(server["dataDir"], "server.dataDir")).expanduser()
+        data_dir = _configured_path(_string(server["dataDir"], "server.dataDir"))
 
     motion = _string(cinematics.get("reducedMotionMode", "tableau"), "cinematics.reducedMotionMode")
     if motion not in VALID_MOTION_MODES:
         raise ConfigError("cinematics.reducedMotionMode is invalid.")
+    voice_input = _string(voice.get("defaultInput", "push-to-talk"), "voice.defaultInput").strip().lower()
+    if voice_input not in VALID_VOICE_INPUTS:
+        raise ConfigError("voice.defaultInput must be push-to-talk or click-to-toggle.")
+    voice_engine = _string(voice.get("engine", "whisper.cpp"), "voice.engine").strip().lower()
+    if voice_engine not in VALID_VOICE_ENGINES:
+        raise ConfigError("voice.engine must be whisper.cpp.")
+    voice_profile = _string(voice.get("modelProfile", "base.en-q5_1"), "voice.modelProfile").strip().lower()
+    if voice_profile not in VALID_VOICE_MODEL_PROFILES:
+        raise ConfigError(f"voice.modelProfile must be one of {sorted(VALID_VOICE_MODEL_PROFILES)}.")
+    if parse_bool(voice.get("allowApiTranscription", False), default=False):
+        raise ConfigError("voice.allowApiTranscription must remain false for local-only voice.")
+    if parse_bool(voice.get("allowApiSpeech", False), default=False):
+        raise ConfigError("voice.allowApiSpeech must remain false for local-only voice.")
     graph_cloud = _string(microsoft.get("cloud", "commercial"), "microsoftGraph.cloud").strip().lower()
     if graph_cloud not in {"commercial", "gcc", "gcc_high", "dod"}:
         raise ConfigError("microsoftGraph.cloud must be commercial, gcc, gcc_high or dod.")
@@ -209,6 +246,28 @@ def load_app_config(path: Path | None = None) -> AppConfig:
             failure_scene=parse_bool(cinematics.get("failureScene", True), default=True),
             reduced_motion_mode=motion,
             mute_by_default=parse_bool(cinematics.get("muteByDefault", False), default=False),
+        ),
+        voice=VoiceConfig(
+            enabled=parse_bool(voice.get("enabled", True), default=True),
+            default_input=voice_input,
+            engine=voice_engine,
+            model_profile=voice_profile,
+            language=_string(voice.get("language", "en"), "voice.language").strip().lower() or "en",
+            microphone_id=_string(voice.get("microphoneId", "default"), "voice.microphoneId").strip() or "default",
+            inference_threads=_positive_int(voice.get("inferenceThreads", 2), "voice.inferenceThreads"),
+            max_duration_seconds=_bounded_int(voice.get("maxDurationSeconds", 60), "voice.maxDurationSeconds", minimum=1, maximum=300),
+            retain_audio=parse_bool(voice.get("retainAudio", False), default=False),
+            runtime_executable=_string(voice.get("runtimeExecutable", ""), "voice.runtimeExecutable"),
+            runtime_dir=_optional_path(voice.get("runtimeDir"), "voice.runtimeDir"),
+            model_dir=_optional_path(voice.get("modelDir"), "voice.modelDir"),
+            max_audio_bytes=_bounded_int(
+                voice.get("maxAudioBytes", 12 * 1024 * 1024),
+                "voice.maxAudioBytes",
+                minimum=64 * 1024,
+                maximum=128 * 1024 * 1024,
+            ),
+            allow_api_transcription=False,
+            allow_api_speech=False,
         ),
         workspace=WorkspaceConfig(allowed_roots=_workspace_roots(workspace)),
         office=OfficeConfig(
@@ -303,6 +362,31 @@ def _positive_int(value: Any, field: str) -> int:
     return parsed
 
 
+def _bounded_int(value: Any, field: str, *, minimum: int, maximum: int) -> int:
+    parsed = _int(value, field)
+    if not (minimum <= parsed <= maximum):
+        raise ConfigError(f"{field} must be between {minimum} and {maximum}.")
+    return parsed
+
+
+def _optional_path(value: Any, field: str) -> Path | None:
+    if value in {None, ""}:
+        return None
+    return _configured_path(_string(value, field))
+
+
+def _configured_path(value: str) -> Path:
+    expanded = os.path.expandvars(value)
+    if os.name != "nt":
+        for name, replacement in {
+            "%LOCALAPPDATA%": os.environ.get("LOCALAPPDATA", str(Path.home() / ".local" / "share")),
+            "%USERPROFILE%": os.environ.get("USERPROFILE", str(Path.home())),
+            "%APPDATA%": os.environ.get("APPDATA", str(Path.home() / ".config")),
+        }.items():
+            expanded = expanded.replace(name, replacement)
+    return Path(expanded).expanduser()
+
+
 def _workspace_roots(workspace: dict[str, Any]) -> tuple[Path, ...]:
     raw = workspace.get("allowedRoots")
     values: list[str] = []
@@ -319,7 +403,7 @@ def _workspace_roots(workspace: dict[str, Any]) -> tuple[Path, ...]:
         values.extend(item for item in env.split(os.pathsep) if item.strip())
     roots = []
     for value in values:
-        root = Path(value).expanduser()
+        root = _configured_path(value)
         try:
             root = root.resolve()
         except OSError:

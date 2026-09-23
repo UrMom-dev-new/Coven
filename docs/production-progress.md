@@ -1,8 +1,28 @@
 # Production Progress
 
-Last updated: 2026-09-22
+Last updated: 2026-09-23
 
-Base commit for this continuation pass: `a90ffb78272288e16c3b32616d37fa05178a2fc8`
+Base commit for this continuation pass: `991c6010e8e543d8971aee6d5b10b86380679857`
+
+## Implemented In The Local Voice Commands Pass
+
+- Replaced the WebView/browser speech-recognition path with a local-only voice service boundary:
+  - WebView records bounded mono WAV audio and sends it to authenticated local endpoints.
+  - `coven.voice` validates RIFF/WAVE PCM input, duration, runtime availability and model SHA1 before transcription.
+  - A persistent worker owner process accepts one transcription at a time and owns a private loopback `whisper-server` child process with CPU inference flags.
+  - Session generation checks, cancellation and stale-result handling prevent late transcripts from affecting the current UI.
+- Added deterministic local command routing:
+  - explicit commands such as `Select Circe`, `Open the journal`, `Show Circe's tasks` and `Stop speaking` execute locally.
+  - addressed requests such as `Circe, draft ...` become editable task drafts.
+  - GovDash, Office, document and solicitation requests remain editable drafts until the user submits them.
+  - free-form dictation becomes an editable message draft for the scoped witch.
+- Added local voice configuration and packaging metadata:
+  - `config/coven.example.json` documents the whisper.cpp runtime/model directories, duration/size limits and disabled cloud speech flags.
+  - `packaging/voice/whispercpp-runtime.json` records the manual runtime import policy and verified English Q5_1 model hashes.
+  - `packaging/Coven.spec` includes the voice packaging manifest.
+- Added frontend controls for voice mode, push-to-talk/click-to-toggle recording, elapsed time, cancellation, local command examples and speech-stop behavior.
+- Added `docs/local-voice.md`.
+- Added unit/static coverage for cloud-speech rejection, local voice boundaries, command routing, cancellation/stale worker results, WAV validation and packaged voice manifest presence.
 
 ## Implemented In This Continuation Pass
 
@@ -52,7 +72,7 @@ Base commit for this continuation pass: `a90ffb78272288e16c3b32616d37fa05178a2fc
   - long assistant responses use a separate retained-output limit
 - Expanded the Quest Journal detail view with requested/served runtime, Hermes run ID, usage, idempotency recovery note, artifact references, stop, approval and linked retry controls.
 - Preserved typed and spoken drafts per witch so context switches do not mix transcripts.
-- Bound speech recognition results to the witch that started recording and labeled browser speech APIs as exposed but unverified rather than production-ready.
+- Bound speech recognition results to the witch that started recording and labeled browser speech APIs as exposed but unverified rather than production-ready. The 2026-09-23 voice pass supersedes this with a local whisper.cpp boundary.
 - Added a Windows installer build script and updated the Windows workflow to compile and upload an unsigned Inno Setup installer artifact after the portable executable smoke gate.
 - Updated Hermes compatibility and acceptance docs to cite the documented Runs API and mark live/Windows-only proof gates honestly.
 
@@ -77,7 +97,7 @@ Base commit for this continuation pass: `a90ffb78272288e16c3b32616d37fa05178a2fc
 - Changed the Quest Journal filter from a select box to the reference-style All/Active/Done segmented control.
 - Collapsed advanced task instructions/priority behind a details disclosure so the default Assign Quest surface matches the compact reference flow.
 - Added right-column quick controls for sound, motion and failure scenes, wired to persisted settings.
-- Added browser/WebView speech recognition support when `SpeechRecognition`/`webkitSpeechRecognition` is available, plus speech synthesis for witch replies when unmuted.
+- Added browser/WebView speech recognition support when `SpeechRecognition`/`webkitSpeechRecognition` is available, plus speech synthesis for witch replies when unmuted. The 2026-09-23 voice pass replaced recognition with local WebView capture plus whisper.cpp transcription.
 - Changed local static cache policy so HTML/CSS/JS/JSON are `no-store`; heavy image assets remain cacheable.
 - Added static `HEAD` support so browser/preload/package smoke checks can validate assets without downloading bodies.
 - Suppressed benign static-response `BrokenPipeError`/`ConnectionResetError` noise when a browser aborts a large asset request.
@@ -88,7 +108,7 @@ Base commit for this continuation pass: `a90ffb78272288e16c3b32616d37fa05178a2fc
 
 ## Verified
 
-- `python3 -m unittest discover -s tests` ran 63 tests and passed.
+- `python3 -m unittest discover -s tests` ran 75 tests and passed.
 - `python3 -m compileall coven tests` passed.
 - `/Users/nefarioususer/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check public/src/app.js` passed.
 - `/Users/nefarioususer/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check public/src/game.js` passed.
@@ -117,11 +137,12 @@ Base commit for this continuation pass: `a90ffb78272288e16c3b32616d37fa05178a2fc
   - `HEAD /assets/reference/coven-approved-reference.png` returned `200 image/png` with cacheable image headers
   - `HEAD /styles.css` returned `200 text/css` with `Cache-Control: no-store`
 - Headless desktop self-test passed from the source tree:
-  - `python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-office-govdash.log`
+  - `python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-local-voice.log`
   - local desktop service booted
   - session bootstrap returned `201`
   - authenticated app shell returned approved-reference UI markers
   - seeded demo tasks were available
+  - local voice status boundary returned `200`
   - approved reference PNG and CSS `HEAD` checks passed
 - New targeted unit coverage includes Hermes empty chat responses, long assistant output persistence, pre-dispatch validation, uncertain delivery state, live run submission/reconciliation shape, lost-response recovery, idempotency conflict rejection, stale terminal-update protection, runtime API readiness gates, live terminal failure event de-duplication, artifact inspection, integration status/config validation and installer workflow markers.
 
@@ -131,6 +152,6 @@ Base commit for this continuation pass: `a90ffb78272288e16c3b32616d37fa05178a2fc
 - Live Hermes task creation, retry, cancellation, approvals and artifact reconciliation are implemented against the documented Runs API and deterministic mocks, but live proof remains blocked because Hermes, provider credentials and an authorized disposable workspace were not available here.
 - Persistent SSE consumption from `/v1/runs/{run_id}/events` still requires live runtime validation before production acceptance.
 - Native Office document mutation/export, Microsoft Graph workbook/file operations and GovDash exchange flows are now represented as configured/blocked/operational integration surfaces, but remain blocked until a Windows machine with Office, tenant credentials and GovDash entitlement is available.
-- Voice is implemented through browser/WebView speech APIs when exposed; microphone permission, Windows/WebView2 speech recognition, local/API transcription, installed voices and hardware transcription quality remain unverified here.
+- Local voice is implemented through WebView audio capture plus a whisper.cpp service boundary; runtime/model installation, microphone permission, Windows/WebView2 capture, installed voices and hardware transcription quality remain unverified here.
 - PyInstaller bundle, Inno Setup installer, update flow, signing and Windows CI artifacts remain unverified in this environment. The Windows workflow now includes a packaged executable self-test and installer compile/upload, but that workflow has not been executed from this macOS workspace.
 - Full production acceptance requires a Windows machine with WebView2, Hermes, microphone access, provider credentials and the target Dell-class hardware.

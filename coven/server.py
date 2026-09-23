@@ -22,7 +22,7 @@ from .integrations import IntegrationManager
 from .reconciler import TaskReconciler
 from .runtime import RuntimeInspector
 from .store import CovenStore
-from .voice import VoiceService
+from .voice import VoiceError, VoiceService
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -64,6 +64,9 @@ class CovenHTTPServer(ThreadingHTTPServer):
         reconciler = getattr(self, "reconciler", None)
         if reconciler is not None:
             reconciler.stop()
+        voice = getattr(self, "voice", None)
+        if voice is not None:
+            voice.close()
         super().server_close()
 
 
@@ -120,6 +123,17 @@ class CovenHandler(BaseHTTPRequestHandler):
         if not isinstance(payload, dict):
             raise ValueError("Request JSON body must be an object.")
         return payload
+
+    def _read_binary(self, *, max_bytes: int) -> bytes:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as exc:
+            raise ValueError("Content-Length must be an integer.") from exc
+        if length <= 0:
+            raise ValueError("Request body is required.")
+        if length > max_bytes:
+            raise ValueError("Request body is too large.")
+        return self.rfile.read(length)
 
     def _check_origin(self) -> bool:
         return is_allowed_origin(
@@ -198,6 +212,16 @@ class CovenHandler(BaseHTTPRequestHandler):
         elif path == "/api/voice/status":
             if self._require_auth():
                 self._send_json({"voice": self.app.voice.status()})
+        elif path == "/api/voice/devices":
+            if self._require_auth():
+                self._send_json({"voice": self.app.voice.devices()})
+        elif path == "/api/voice/commands":
+            if self._require_auth():
+                self._send_json(self.app.voice.commands())
+        elif path.startswith("/api/voice/sessions/"):
+            if self._require_auth():
+                session_id = unquote(path.rsplit("/", 1)[-1])
+                self._send_json(self.app.voice.session_status(session_id))
         else:
             self._serve_static(path)
 
@@ -220,6 +244,28 @@ class CovenHandler(BaseHTTPRequestHandler):
         path = parsed.path
 
         try:
+            if path.startswith("/api/voice/sessions/") and path.endswith("/audio"):
+                if not self._is_authenticated():
+                    self._send_error_json(HTTPStatus.UNAUTHORIZED, "Authentication is required.", code="auth_required")
+                    return
+                parts = path.split("/")
+                task_index = parts.index("sessions") if "sessions" in parts else -1
+                session_id = unquote(parts[task_index + 1]) if task_index >= 0 and task_index + 1 < len(parts) else ""
+                generation_header = self.headers.get("X-Coven-Voice-Generation", "")
+                try:
+                    generation = int(generation_header)
+                except ValueError as exc:
+                    raise ValueError("X-Coven-Voice-Generation must be an integer.") from exc
+                audio = self._read_binary(max_bytes=self.app.voice.config.max_audio_bytes)
+                self._send_json(
+                    self.app.voice.finish_session_audio(
+                        session_id,
+                        generation=generation,
+                        audio=audio,
+                        content_type=self.headers.get("Content-Type", ""),
+                    )
+                )
+                return
             body = self._read_json()
             if path == "/api/auth/session":
                 token = body.get("token")
@@ -299,6 +345,16 @@ class CovenHandler(BaseHTTPRequestHandler):
                 )
             elif path == "/api/settings":
                 self._send_json({"settings": self.app.store.update_preferences(body)})
+            elif path == "/api/voice/start":
+                self._send_json(self.app.voice.start_session(body), HTTPStatus.CREATED)
+            elif path.startswith("/api/voice/sessions/") and path.endswith("/cancel"):
+                task_id = unquote(path.split("/")[-2])
+                generation = body.get("generation")
+                if generation is not None and not isinstance(generation, int):
+                    raise ValueError("generation must be an integer.")
+                self._send_json(self.app.voice.cancel_session(task_id, generation=generation))
+            elif path == "/api/voice/interpret":
+                self._send_json(self.app.voice.interpret_transcript(body))
             elif path == "/api/integrations/office/operation":
                 operation = body.get("operation")
                 payload = body.get("payload")
@@ -312,6 +368,8 @@ class CovenHandler(BaseHTTPRequestHandler):
         except PermissionError as exc:
             self._send_error_json(HTTPStatus.FORBIDDEN, str(exc), code="auth_denied")
         except AdapterError as exc:
+            self._send_error_json(HTTPStatus.CONFLICT, str(exc), code=exc.code, details=exc.details)
+        except VoiceError as exc:
             self._send_error_json(HTTPStatus.CONFLICT, str(exc), code=exc.code, details=exc.details)
         except KeyError:
             self._send_error_json(HTTPStatus.NOT_FOUND, "Requested item was not found.", code="not_found")
@@ -367,7 +425,7 @@ def build_server(
     server.runtime = RuntimeInspector(config)
     server.namespace = "demo" if config.demo_mode else "live"
     server.agent_adapter = build_agent_adapter(config, server.store)
-    server.voice = VoiceService()
+    server.voice = VoiceService(config, data_dir=data_dir, profile_path=PROFILE_PATH)
     server.integrations = IntegrationManager(config)
     server.reconciler = None
     if server.namespace == "live" and hasattr(server.agent_adapter, "refresh_tasks"):

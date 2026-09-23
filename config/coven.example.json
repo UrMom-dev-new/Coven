@@ -23,7 +23,19 @@
     }
   },
   "voice": {
+    "enabled": true,
     "defaultInput": "push-to-talk",
+    "engine": "whisper.cpp",
+    "modelProfile": "base.en-q5_1",
+    "language": "en",
+    "microphoneId": "default",
+    "inferenceThreads": 2,
+    "maxDurationSeconds": 60,
+    "retainAudio": false,
+    "runtimeExecutable": "",
+    "runtimeDir": "%LOCALAPPDATA%/Coven/voice/runtime",
+    "modelDir": "%LOCALAPPDATA%/Coven/voice/models",
+    "maxAudioBytes": 12582912,
     "allowApiTranscription": false,
     "allowApiSpeech": false
   },

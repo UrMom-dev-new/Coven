@@ -10,6 +10,7 @@ hiddenimports = ["clr"] + collect_submodules("webview.platforms")
 datas = [
     (str(ROOT / "public"), "public"),
     (str(ROOT / "config"), "config"),
+    (str(ROOT / "packaging" / "voice"), "packaging/voice"),
     (str(ROOT / "docs" / "product-contract.md"), "docs"),
     (str(ROOT / "README.md"), "."),
 ]

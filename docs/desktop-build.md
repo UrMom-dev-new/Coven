@@ -53,7 +53,9 @@ dist\Coven\Coven.exe --self-test
 
 Use `-SkipSmoke` only when debugging a packaging failure before the executable can boot.
 
-Hermes, Ollama and model files are not bundled. They are explicit onboarding prerequisites.
+Hermes, Ollama, whisper.cpp runtime binaries and model files are not bundled. They are explicit onboarding prerequisites.
+
+Local voice expects a reviewed Windows x64 `whisper-server.exe` in the configured voice runtime directory and a verified English model file in the configured voice model directory. See `docs/local-voice.md` for the manifest and privacy boundary.
 
 ## Installer
 

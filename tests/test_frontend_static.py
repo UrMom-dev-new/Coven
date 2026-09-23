@@ -25,6 +25,14 @@ class FrontendStaticTests(unittest.TestCase):
         self.assertIn("pywebviewready", source)
         self.assertIn("refreshDesktopUnlock", source)
 
+    def test_voice_uses_local_backend_not_browser_speech_recognition(self):
+        source = (ROOT / "public" / "src" / "app.js").read_text(encoding="utf-8")
+
+        self.assertNotIn("SpeechRecognition", source)
+        self.assertNotIn("webkitSpeechRecognition", source)
+        self.assertIn("/api/voice/start", source)
+        self.assertIn("encodeWav", source)
+
 
 if __name__ == "__main__":
     unittest.main()
