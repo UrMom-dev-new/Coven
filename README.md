@@ -13,7 +13,6 @@ Private beta testers can download the current prerelease from [Coven 0.3.0-beta 
 - [Download `Coven-Setup-x64.exe`](https://github.com/UrMom-dev-new/HermesAvatar/releases/download/coven-v0.3.0-beta/Coven-Setup-x64.exe)
 - [Download `Coven-Setup-x64.exe.sha256`](https://github.com/UrMom-dev-new/HermesAvatar/releases/download/coven-v0.3.0-beta/Coven-Setup-x64.exe.sha256)
 
-This repository is private. Testers need repository access until a separately approved public binary-distribution repository exists.
 
 Click-only path:
 
