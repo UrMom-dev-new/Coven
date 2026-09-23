@@ -122,11 +122,26 @@
           <form id="messageForm" class="composer">
             <label for="messageInput">Message</label>
             <textarea id="messageInput" rows="3" placeholder="Talk with the selected witch. This does not assign executable work."></textarea>
+            <div class="voice-panel" aria-label="Local voice input">
+              <label for="voiceMode">Voice mode</label>
+              <select id="voiceMode">
+                <option value="auto">Commands + draft</option>
+                <option value="message">Message draft</option>
+                <option value="task">Task draft</option>
+                <option value="dictation">Literal dictation</option>
+              </select>
+              <span id="voiceElapsed" class="inline-state">00:00</span>
+            </div>
             <div class="action-row">
               <button type="submit">Send message</button>
               <button id="recordButton" type="button" class="secondary-button">Push to talk</button>
+              <button id="cancelVoiceButton" type="button" class="secondary-button">Cancel voice</button>
               <button id="stopSpeakingButton" type="button" class="secondary-button">Stop speech</button>
             </div>
+            <details class="voice-help">
+              <summary>Voice commands</summary>
+              <ul id="voiceCommandList"></ul>
+            </details>
           </form>
 
           <form id="taskForm" class="task-form">

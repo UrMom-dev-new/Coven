@@ -15,6 +15,14 @@ class ServerStaticTests(unittest.TestCase):
         self.assertIn("daemon_threads = True", source)
         self.assertIn("if sys.stderr is None", source)
 
+    def test_voice_audio_uses_bounded_binary_endpoint(self):
+        source = (ROOT / "coven" / "server.py").read_text(encoding="utf-8")
+
+        self.assertIn("def _read_binary", source)
+        self.assertIn("/api/voice/start", source)
+        self.assertIn('path.endswith("/audio")', source)
+        self.assertIn("max_audio_bytes", source)
+
 
 if __name__ == "__main__":
     unittest.main()

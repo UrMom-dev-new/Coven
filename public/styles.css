@@ -307,6 +307,50 @@ dd {
   height: 18px;
 }
 
+.voice-panel {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(150px, 1.3fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-panel .inline-state {
+  justify-self: end;
+  min-width: 58px;
+  text-align: right;
+}
+
+.voice-help {
+  border: 1px solid rgba(122, 96, 55, 0.32);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: rgba(8, 12, 17, 0.62);
+}
+
+.voice-help summary {
+  color: var(--candle);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.voice-help ul {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.voice-help li {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.voice-help b {
+  color: var(--text);
+  margin-right: 6px;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(560px, 58fr) minmax(300px, 21fr) minmax(300px, 21fr);

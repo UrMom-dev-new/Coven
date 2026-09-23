@@ -1,0 +1,29 @@
+{
+  "runtime": {
+    "engine": "whisper.cpp",
+    "pinnedRelease": "manual-import",
+    "expectedExecutable": "whisper-server.exe",
+    "notes": [
+      "Package a CPU-only Windows x64 whisper.cpp server build after verifying CPU compatibility on the target machine.",
+      "Do not execute user-supplied runtime archives. Install only a reviewed runtime artifact into the app-owned voice/runtime directory.",
+      "The app starts the server only as an app-owned loopback child process with a random request-path prefix.",
+      "The app remains usable without this runtime; local voice status reports setup_required."
+    ]
+  },
+  "models": [
+    {
+      "profile": "base.en-q5_1",
+      "file": "ggml-base.en-q5_1.bin",
+      "sizeMiB": 57,
+      "sha1": "d26d7ce5a1b6e57bea5d0431b9c20ae49423c94a",
+      "source": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en-q5_1.bin"
+    },
+    {
+      "profile": "tiny.en-q5_1",
+      "file": "ggml-tiny.en-q5_1.bin",
+      "sizeMiB": 31,
+      "sha1": "3fb92ec865cbbc769f08137f22470d6b66e071b6",
+      "source": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en-q5_1.bin"
+    }
+  ]
+}

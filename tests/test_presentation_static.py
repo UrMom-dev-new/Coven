@@ -14,8 +14,9 @@ class PresentationStaticTests(unittest.TestCase):
 
     def test_voice_boundary_exists(self):
         source = (ROOT / "coven" / "voice.py").read_text(encoding="utf-8")
-        self.assertIn("VoiceStatus", source)
-        self.assertIn("unconfigured", source)
+        self.assertIn("VoiceService", source)
+        self.assertIn("VoiceCommandRouter", source)
+        self.assertIn("whisper.cpp", source)
 
 
 if __name__ == "__main__":

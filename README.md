@@ -79,7 +79,7 @@ python3 -m unittest discover -s tests
 - Separate conversation composer and task assignment form.
 - Live task records for Hermes run/session IDs, idempotency keys, attempts, requested and served runtime, usage, approval state, artifacts, timeline, stop, approval, and linked retry actions.
 - Quest journal with assignee, state, latest update, runtime details, timeline, blockers, evidence, result, retry action, mode labels, segmented filters, and quick controls.
-- Browser/WebView speech recognition when exposed by the runtime, plus speech synthesis for unmuted witch replies; unsupported or unverified runtimes are labeled honestly.
+- Local-only voice capture and command routing through a whisper.cpp boundary, with WAV upload limits, cancellation/stale-result protection, editable draft handling, and speech synthesis for unmuted witch replies.
 - Presentation controller for Ophelia's river scene that consumes immutable terminal failure events and cannot mutate task outcomes.
 - Demo adapter fixtures for completed, failed, duplicate-safe, skipped, and retried task flows.
 - Desktop unlock bridge for the pywebview shell, browser fallback launcher and packaged executable self-test.
@@ -89,7 +89,8 @@ python3 -m unittest discover -s tests
 - Live Hermes task/run lifecycle code is implemented against the documented Runs API and deterministic mocks, but no live Hermes server was available in this environment.
 - Installed Office automation, Microsoft Graph and GovDash routes are surfaced as explicit configured/blocked/operational integration states, but live Office, tenant and GovDash entitlement tests were not available here.
 - Hermes was not installed in the development environment used for this commit, so served-provider evidence from a real model is still blocked.
-- The Dell Inspiron target hardware was not available, so Windows behavior, performance, local transcription benchmarking, and browser codec behavior still require validation there.
+- The Dell Inspiron target hardware was not available, so Windows behavior, performance, microphone permission, local transcription benchmarking, installed voices, and WebView2 capture behavior still require validation there.
+- whisper.cpp runtime binaries and model files are documented as manually installed external assets; this repository does not claim a bundled or signed speech runtime.
 - No OpenAI API credential was available in this environment, so live API calls were not exercised.
 - The main sanctuary and portrait presentation now use the approved reference bitmap. Native animation/video polish and Windows high-DPI visual acceptance still require target-machine validation.
 
@@ -99,5 +100,6 @@ Additional beta docs:
 
 - `docs/product-contract.md`
 - `docs/desktop-build.md`
+- `docs/local-voice.md`
 - `docs/hermes-compatibility.md`
 - `docs/windows-beta-acceptance.md`

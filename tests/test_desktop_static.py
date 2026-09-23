@@ -23,6 +23,7 @@ class DesktopStaticTests(unittest.TestCase):
         self.assertIn("--self-test-log", source)
         self.assertIn("sanctuary-art", source)
         self.assertIn("Prepare project brief", source)
+        self.assertIn("/api/voice/status", source)
         self.assertIn("Cache-Control", source)
         self.assertIn('getattr(sys, "frozen", False)', source)
         self.assertIn("os._exit(code)", source)
@@ -53,6 +54,7 @@ class DesktopStaticTests(unittest.TestCase):
         self.assertIn("disable_windowed_traceback=True", spec)
         self.assertIn("collect_submodules(\"webview.platforms\")", spec)
         self.assertIn("hiddenimports=hiddenimports", spec)
+        self.assertIn("packaging/voice", spec)
 
 
 if __name__ == "__main__":

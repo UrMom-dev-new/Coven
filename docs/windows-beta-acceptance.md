@@ -17,6 +17,7 @@ No Windows VM, Dell Inspiron, WebView2 runtime, Hermes install, microphone hardw
 - Headless desktop boot smoke: `python -m coven.desktop --self-test`.
 - Portable executable smoke gate: `dist\Coven\Coven.exe --self-test` from `scripts/build-windows.ps1` and the Windows workflow.
 - Unsigned installer compile gate: `scripts\build-installer.ps1` and the Windows workflow after the portable smoke gate.
+- Local voice service boundary, command router and packaging manifest for manually installed whisper.cpp runtime/model assets.
 
 ## Acceptance Scenarios
 
@@ -32,7 +33,7 @@ No Windows VM, Dell Inspiron, WebView2 runtime, Hermes install, microphone hardw
 | Microsoft Graph selected-location file/workbook access | Blocked | Tenant/cloud/token readiness reporting is implemented; delegated tenant auth and selected SharePoint/OneDrive operations were unavailable. |
 | GovDash proposal exchange | Blocked | SharePoint/API/browser route status is implemented; actual GovDash account/entitlement and exchange route were unavailable. |
 | Controlled terminal failure -> one Ophelia scene -> report -> recovery | Fixture-tested at API level | Demo and live-store terminal failure de-duplication are unit-tested; browser playback on Windows remains unverified. |
-| Voice round-trip | Partial | Browser/WebView speech APIs are used when exposed and transcripts are scoped by witch; microphone permission, installed Windows voices and transcription quality remain unverified. |
+| Voice round-trip | Partial | WebView captures WAV audio and sends it to the local whisper.cpp service boundary; command routing, drafts, cancellation and stale-result handling are source-tested. Runtime/model installation, microphone permission, installed voices and transcription quality remain unverified on Windows hardware. |
 | Restart during run, provider disconnect/reconnect, sleep/resume, duplicate launch | Partial | Single-instance guard, background run reconciliation via `GET /v1/runs/{run_id}` and lost-submission recovery are implemented; real gateway interruption/retention behavior requires Hermes. |
 | Missing model/key/WebView2/malformed events/hostile HTML/unauthorized local requests | Partial | Auth/origin/malformed event/HTML regressions tested; WebView2 missing path is code-only. |
 | Portable executable boots authenticated app shell | Source-tested, Windows pending | `python -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-final.log` passed on macOS source tree; Windows CI runs packaged `Coven.exe --self-test` when pushed. |

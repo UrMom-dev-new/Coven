@@ -1,4 +1,4 @@
-import { api, postJson } from "./api.js";
+import { api, postBinary, postJson } from "./api.js";
 import { $, clear, field, node, restoreFocus } from "./dom.js";
 import { createSanctuaryGame } from "./game.js";
 import { sceneDurationForMotion } from "./presentation.js";
@@ -21,6 +21,9 @@ const state = {
   cinematicTimer: null,
   skipAllFailures: false,
   recording: null,
+  voiceStatus: null,
+  voiceCommands: [],
+  voiceHoldTimer: null,
   voiceDrafts: {},
   messageDrafts: {},
   lastSpokenMessageId: null,
@@ -69,7 +72,7 @@ function renderOnboarding() {
     ["GovDash", integrationSummary("govdash")],
     ["Hardware", `${state.status.hardware?.system || "unknown"} ${state.status.hardware?.machine || ""}, ${state.status.hardware?.memory || "memory unknown"}`],
     ["Workspace", workspaceSummary()],
-    ["Voice", "Text-first path active; voice setup is a later gate."],
+    ["Voice", voiceSummary()],
   ];
   for (const [title, text] of items) {
     host.append(node("div", { className: "check-item" }, [node("b", { text: title }), node("span", { text })]));
@@ -96,6 +99,14 @@ function hermesApiSummary() {
   if (!apiState.authenticated) return "Bearer token not accepted.";
   if (!apiState.taskCapable) return "Authenticated, but Runs API is not advertised.";
   return apiState.runEventsCapable ? "Runs API ready with event stream support." : "Runs API ready; event stream unavailable.";
+}
+
+function voiceSummary() {
+  const voice = state.voiceStatus;
+  if (!voice) return "Checking local voice.";
+  if (!voice.enabled) return "Disabled.";
+  if (voice.state === "ready") return `${voice.model?.label || voice.model?.profile || "Whisper model"} ready locally.`;
+  return (voice.notes && voice.notes[0]) || "Local voice setup is required.";
 }
 
 function captureUiPosition() {
@@ -137,6 +148,18 @@ async function refreshStatus(force = false) {
   } else {
     setNotice("Hermes Runs API is available. Live tasks are submitted as recoverable remote runs.", "info");
   }
+  renderOnboarding();
+}
+
+async function refreshVoiceStatus() {
+  const [statusPayload, commandsPayload] = await Promise.all([
+    api("/api/voice/status"),
+    state.voiceCommands.length ? Promise.resolve({ commands: state.voiceCommands }) : api("/api/voice/commands"),
+  ]);
+  state.voiceStatus = statusPayload.voice;
+  state.voiceCommands = commandsPayload.commands || [];
+  renderVoiceCommands();
+  updateVoiceAvailability();
   renderOnboarding();
 }
 
@@ -639,73 +662,297 @@ function replaceTask(task) {
   state.selectedTask = task.id;
 }
 
+async function startVoiceCapture() {
+  if (state.recording) return;
+  if (state.voiceStatus?.state !== "ready") {
+    setNotice(voiceSummary(), "warn");
+    return;
+  }
+  stopSpeech();
+  const started = await postJson("/api/voice/start", {
+    witchId: state.selectedWitch,
+    inputMode: $("voiceMode").value,
+    view: state.activeView,
+  });
+  const session = started.session;
+  const recording = {
+    sessionId: session.id,
+    generation: session.generation,
+    witchId: session.witchId,
+    inputMode: session.inputMode,
+    chunks: [],
+    sampleRate: 0,
+    startedAt: Date.now(),
+    busy: true,
+    cancelled: false,
+    label: `Listening for ${profile(session.witchId)?.name || session.witchId}`,
+    stream: null,
+    audioContext: null,
+    source: null,
+    processor: null,
+    timer: null,
+    pollTimer: null,
+  };
+  state.recording = recording;
+  updateVoiceAvailability();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }, video: false });
+    if (state.recording !== recording || recording.cancelled) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const audioContext = new AudioContext();
+    const source = audioContext.createMediaStreamSource(stream);
+    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+    processor.onaudioprocess = (event) => {
+      if (state.recording !== recording || recording.cancelled) return;
+      const input = event.inputBuffer.getChannelData(0);
+      recording.chunks.push(new Float32Array(input));
+      event.outputBuffer.getChannelData(0).fill(0);
+    };
+    source.connect(processor);
+    processor.connect(audioContext.destination);
+    Object.assign(recording, {
+      stream,
+      audioContext,
+      source,
+      processor,
+      sampleRate: audioContext.sampleRate,
+      busy: false,
+    });
+    recording.timer = window.setInterval(() => updateVoiceElapsed(recording), 250);
+    window.setTimeout(() => {
+      if (state.recording === recording && !recording.cancelled) finishVoiceCapture().catch((error) => setNotice(error.message, "error"));
+    }, (state.voiceStatus?.maxDurationSeconds || 60) * 1000);
+    updateVoiceElapsed(recording);
+    setNotice("Recording locally. Release or press Finish when ready.", "info");
+  } catch (error) {
+    await cancelVoiceInput("Microphone capture failed or was denied.");
+    setNotice(`Microphone capture failed: ${error.message || error}.`, "error");
+  } finally {
+    updateVoiceAvailability();
+  }
+}
+
+async function finishVoiceCapture() {
+  const recording = state.recording;
+  if (!recording || recording.busy) return;
+  recording.busy = true;
+  recording.label = "Transcribing locally...";
+  updateVoiceAvailability();
+  cleanupVoiceCapture(recording, { keepChunks: true });
+  const durationMs = Date.now() - recording.startedAt;
+  if (durationMs < 250 || !recording.chunks.length) {
+    await cancelVoiceInput("Recording was too short.");
+    setNotice("Recording was too short to transcribe.", "warn");
+    return;
+  }
+  const wav = encodeWav(recording.chunks, recording.sampleRate || 48000, 16000);
+  try {
+    await postBinary(`/api/voice/sessions/${encodeURIComponent(recording.sessionId)}/audio`, wav, {
+      "Content-Type": "audio/wav",
+      "X-Coven-Voice-Generation": String(recording.generation),
+    });
+    recording.chunks = [];
+    pollVoiceResult(recording);
+  } catch (error) {
+    if (state.recording === recording) state.recording = null;
+    setNotice(error.message, "error");
+    updateVoiceAvailability();
+  }
+}
+
+async function cancelVoiceInput(reason = "Voice input cancelled.") {
+  const recording = state.recording;
+  if (!recording) return;
+  recording.cancelled = true;
+  cleanupVoiceCapture(recording);
+  state.recording = null;
+  updateVoiceAvailability();
+  try {
+    await postJson(`/api/voice/sessions/${encodeURIComponent(recording.sessionId)}/cancel`, { generation: recording.generation });
+  } catch (_error) {
+    // Cancellation is best effort after local invalidation.
+  }
+  setNotice(reason, "warn");
+}
+
+function cleanupVoiceCapture(recording, { keepChunks = false } = {}) {
+  if (recording.timer) window.clearInterval(recording.timer);
+  if (recording.pollTimer) window.clearTimeout(recording.pollTimer);
+  if (recording.processor) recording.processor.disconnect();
+  if (recording.source) recording.source.disconnect();
+  if (recording.stream) recording.stream.getTracks().forEach((track) => track.stop());
+  if (recording.audioContext) recording.audioContext.close().catch(() => {});
+  if (!keepChunks) recording.chunks = [];
+  $("voiceElapsed").textContent = "00:00";
+}
+
+function updateVoiceElapsed(recording) {
+  if (state.recording !== recording) return;
+  const seconds = Math.floor((Date.now() - recording.startedAt) / 1000);
+  const minutes = Math.floor(seconds / 60);
+  $("voiceElapsed").textContent = `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+async function pollVoiceResult(recording) {
+  if (state.recording !== recording || recording.cancelled) return;
+  try {
+    const payload = await api(`/api/voice/sessions/${encodeURIComponent(recording.sessionId)}`);
+    const session = payload.session;
+    if (state.recording !== recording || session.generation !== recording.generation) return;
+    recording.label = statusLabel(session.state);
+    updateVoiceAvailability();
+    if (session.state === "transcript_ready") {
+      state.recording = null;
+      applyVoiceResult(session);
+      updateVoiceAvailability();
+      return;
+    }
+    if (session.state === "cancelled" || session.state === "error") {
+      state.recording = null;
+      setNotice(session.error?.message || "Voice input did not produce a transcript.", "warn");
+      updateVoiceAvailability();
+      return;
+    }
+    recording.pollTimer = window.setTimeout(() => pollVoiceResult(recording), 800);
+  } catch (error) {
+    if (state.recording === recording) {
+      state.recording = null;
+      setNotice(error.message, "error");
+      updateVoiceAvailability();
+    }
+  }
+}
+
+function applyVoiceResult(session) {
+  const result = session.result || {};
+  const transcript = result.transcript || "";
+  const command = result.command || { action: "draft_message", text: transcript };
+  if (command.action === "select_witch" && command.witchId) {
+    selectWitch(command.witchId);
+    setNotice(command.reason || "Selected witch.", "info");
+    return;
+  }
+  if (command.action === "open_view" && command.view) {
+    setActiveView(command.view);
+    setNotice(command.reason || "Opened view.", "info");
+    return;
+  }
+  if (command.action === "show_tasks") {
+    selectWitch(command.witchId || session.witchId);
+    setActiveView("journal");
+    const task = state.tasks.find((item) => item.assignee === (command.witchId || session.witchId));
+    if (task) state.selectedTask = task.id;
+    renderTasks();
+    setNotice(command.reason || "Opened tasks.", "info");
+    return;
+  }
+  if (command.action === "stop_speaking") {
+    stopSpeech();
+    setNotice(command.reason || "Stopped speech.", "info");
+    return;
+  }
+  if (command.action === "draft_task" || $("voiceMode").value === "task") {
+    const witchId = command.witchId || session.witchId;
+    if (witchId && witchId !== state.selectedWitch) selectWitch(witchId);
+    $("taskTitle").value = command.title || transcript.slice(0, 88) || "Voice task draft";
+    $("taskInstructions").value = command.instructions || transcript;
+    setActiveView("sanctuary");
+    setNotice(`${command.reason || "Prepared editable task draft."}${command.integration ? ` ${statusLabel(command.integration)} readiness is shown in Settings.` : ""}`, "info");
+    $("taskTitle").focus();
+    return;
+  }
+  receiveVoiceTranscript(session.witchId, command.text || transcript);
+  setNotice(command.reason || "Transcript is ready for review.", "info");
+}
+
+function encodeWav(chunks, sourceRate, targetRate) {
+  const samples = flattenAudio(chunks);
+  const resampled = resample(samples, sourceRate, targetRate);
+  const dataBytes = resampled.length * 2;
+  const buffer = new ArrayBuffer(44 + dataBytes);
+  const view = new DataView(buffer);
+  writeString(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataBytes, true);
+  writeString(view, 8, "WAVE");
+  writeString(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, targetRate, true);
+  view.setUint32(28, targetRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(view, 36, "data");
+  view.setUint32(40, dataBytes, true);
+  let offset = 44;
+  for (const sample of resampled) {
+    const clamped = Math.max(-1, Math.min(1, sample));
+    view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+    offset += 2;
+  }
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+function flattenAudio(chunks) {
+  const length = chunks.reduce((total, chunk) => total + chunk.length, 0);
+  const output = new Float32Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return output;
+}
+
+function resample(samples, sourceRate, targetRate) {
+  if (sourceRate === targetRate) return samples;
+  const ratio = sourceRate / targetRate;
+  const length = Math.floor(samples.length / ratio);
+  const output = new Float32Array(length);
+  for (let index = 0; index < length; index += 1) {
+    const sourceIndex = index * ratio;
+    const before = Math.floor(sourceIndex);
+    const after = Math.min(before + 1, samples.length - 1);
+    const weight = sourceIndex - before;
+    output[index] = samples[before] * (1 - weight) + samples[after] * weight;
+  }
+  return output;
+}
+
+function writeString(view, offset, text) {
+  for (let index = 0; index < text.length; index += 1) {
+    view.setUint8(offset + index, text.charCodeAt(index));
+  }
+}
+
+function renderVoiceCommands() {
+  const list = $("voiceCommandList");
+  if (!list) return;
+  clear(list);
+  for (const command of state.voiceCommands) {
+    list.append(node("li", {}, [node("b", { text: command.phrase }), node("span", { text: command.action })]));
+  }
+}
+
 function updateVoiceAvailability() {
-  const Recognition = speechRecognitionConstructor();
-  $("recordButton").disabled = !Recognition;
-  $("recordButton").textContent = Recognition ? "Push to talk" : "Voice unavailable";
-  $("voiceState").textContent = Recognition ? "Browser voice exposed; review transcript before sending" : "Voice unavailable in this WebView";
+  const ready = state.voiceStatus?.state === "ready";
+  const captureAvailable = Boolean(navigator.mediaDevices?.getUserMedia && (window.AudioContext || window.webkitAudioContext));
+  $("recordButton").disabled = !ready || !captureAvailable || Boolean(state.recording?.busy);
+  $("recordButton").textContent = state.recording ? "Finish recording" : (ready && captureAvailable ? "Push to talk" : "Voice unavailable");
+  $("cancelVoiceButton").disabled = !state.recording;
+  $("voiceState").textContent = state.recording?.label || voiceSummary();
   $("stopSpeakingButton").disabled = !("speechSynthesis" in window);
 }
 
-function speechRecognitionConstructor() {
-  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
-}
-
-function toggleRecording() {
+async function toggleRecording() {
   if (state.recording) {
-    state.recording.cancelled = false;
-    state.recording.recognition.stop();
+    await finishVoiceCapture();
     return;
   }
-  const Recognition = speechRecognitionConstructor();
-  if (!Recognition) {
-    setNotice("This browser/WebView does not expose speech recognition. Text workflows are fully available.", "warn");
-    return;
-  }
-  const recognition = new Recognition();
-  recognition.lang = "en-US";
-  recognition.continuous = false;
-  recognition.interimResults = false;
-  recognition.maxAlternatives = 1;
-  const recording = {
-    recognition,
-    witchId: state.selectedWitch,
-    startedAt: Date.now(),
-    cancelled: false,
-    timer: null,
-  };
-  state.recording = recording;
-  $("recordButton").textContent = "Listening...";
-  $("voiceState").textContent = `Listening for ${profile(recording.witchId)?.name || recording.witchId}`;
-  recognition.addEventListener("result", (event) => {
-    const transcript = Array.from(event.results)
-      .map((result) => result[0]?.transcript || "")
-      .join(" ")
-      .trim();
-    if (transcript) {
-      receiveVoiceTranscript(recording.witchId, transcript);
-    }
-  });
-  recognition.addEventListener("error", (event) => {
-    setNotice(`Voice recognition failed: ${event.error || "unknown error"}.`, "warn");
-  });
-  recognition.addEventListener("end", () => {
-    if (state.recording === recording) state.recording = null;
-    if (recording.timer) window.clearTimeout(recording.timer);
-    $("recordButton").textContent = "Push to talk";
-    if ($("voiceState").textContent.startsWith("Listening")) $("voiceState").textContent = "Browser voice exposed; review transcript before sending";
-  });
-  try {
-    recognition.start();
-    recording.timer = window.setTimeout(() => {
-      if (state.recording === recording) recognition.stop();
-    }, 60000);
-  } catch (error) {
-    state.recording = null;
-    $("recordButton").textContent = "Push to talk";
-    $("voiceState").textContent = "Voice start failed";
-    setNotice(`Voice recognition could not start: ${error.message || error}.`, "warn");
-  }
+  await startVoiceCapture();
 }
 
 function receiveVoiceTranscript(witchId, transcript) {
@@ -723,10 +970,6 @@ function receiveVoiceTranscript(witchId, transcript) {
 }
 
 function stopSpeech() {
-  if (state.recording) {
-    state.recording.cancelled = true;
-    state.recording.recognition.stop();
-  }
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   $("voiceState").textContent = "Speech stopped";
 }
@@ -864,7 +1107,40 @@ function bindEvents() {
   $("messageForm").addEventListener("submit", sendMessage);
   $("messageInput").addEventListener("input", () => rememberMessageDraft(state.selectedWitch));
   $("taskForm").addEventListener("submit", assignTask);
-  $("recordButton").addEventListener("click", toggleRecording);
+  $("recordButton").addEventListener("click", (event) => {
+    if (event.currentTarget.dataset.pointerConsumed === "true") {
+      event.currentTarget.dataset.pointerConsumed = "";
+      return;
+    }
+    toggleRecording().catch((error) => setNotice(error.message, "error"));
+  });
+  $("recordButton").addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (state.recording || isTypingSensitive()) return;
+    event.currentTarget.dataset.pointerStarted = "pending";
+    const button = event.currentTarget;
+    state.voiceHoldTimer = window.setTimeout(() => {
+      if (button.dataset.pointerStarted !== "pending") return;
+      button.dataset.pointerStarted = "active";
+      startVoiceCapture().catch((error) => setNotice(error.message, "error"));
+    }, 220);
+  });
+  $("recordButton").addEventListener("pointerup", (event) => {
+    if (state.voiceHoldTimer) window.clearTimeout(state.voiceHoldTimer);
+    if (event.currentTarget.dataset.pointerStarted === "active") {
+      event.currentTarget.dataset.pointerConsumed = "true";
+      if (state.recording) finishVoiceCapture().catch((error) => setNotice(error.message, "error"));
+    }
+    event.currentTarget.dataset.pointerStarted = "";
+  });
+  $("recordButton").addEventListener("pointerleave", (event) => {
+    if (state.voiceHoldTimer) window.clearTimeout(state.voiceHoldTimer);
+    if (event.currentTarget.dataset.pointerStarted === "active" && state.recording) {
+      event.currentTarget.dataset.pointerStarted = "";
+      cancelVoiceInput("Voice input cancelled.").catch((error) => setNotice(error.message, "error"));
+    }
+  });
+  $("cancelVoiceButton").addEventListener("click", () => cancelVoiceInput("Voice input cancelled.").catch((error) => setNotice(error.message, "error")));
   $("stopSpeakingButton").addEventListener("click", stopSpeech);
   $("compactToggle").addEventListener("click", () => {
     state.compact = !state.compact;
@@ -916,6 +1192,7 @@ async function refreshAll({ forceRuntime = false } = {}) {
   const position = captureUiPosition();
   try {
     await refreshStatus(forceRuntime);
+    await refreshVoiceStatus();
     await refreshSettings();
     await refreshTasks();
     await refreshFailures();
@@ -949,6 +1226,7 @@ async function init() {
   });
   $("sanctuaryCanvas").addEventListener("coven-select-witch", (event) => selectWitch(event.detail.id));
   await refreshStatus();
+  await refreshVoiceStatus();
   await refreshSettings();
   await refreshProfiles();
   await refreshConversation();

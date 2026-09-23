@@ -67,6 +67,29 @@ class AuthConfigTests(unittest.TestCase):
             with self.assertRaises(ConfigError):
                 load_app_config(path)
 
+    def test_voice_config_rejects_cloud_speech_and_bad_limits(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "coven.json"
+            path.write_text('{"voice": {"allowApiTranscription": true}}', encoding="utf-8")
+            with self.assertRaises(ConfigError):
+                load_app_config(path)
+
+            path.write_text('{"voice": {"allowApiSpeech": true}}', encoding="utf-8")
+            with self.assertRaises(ConfigError):
+                load_app_config(path)
+
+            path.write_text('{"voice": {"maxDurationSeconds": 0}}', encoding="utf-8")
+            with self.assertRaises(ConfigError):
+                load_app_config(path)
+
+    def test_voice_config_defaults_to_local_whisper(self):
+        config = load_app_config()
+
+        self.assertEqual(config.voice.engine, "whisper.cpp")
+        self.assertEqual(config.voice.model_profile, "base.en-q5_1")
+        self.assertFalse(config.voice.allow_api_transcription)
+        self.assertFalse(config.voice.allow_api_speech)
+
     def test_workspace_roots_can_include_environment_entries(self):
         with TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"COVEN_ALLOWED_WORKSPACE_ROOTS": tmp}, clear=False):
             roots = load_app_config().workspace.allowed_roots

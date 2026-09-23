@@ -25,12 +25,18 @@ class AssetReleaseTests(unittest.TestCase):
             "coven/desktop.py",
             "packaging/Coven.spec",
             "packaging/pyinstaller_runtime_hook.py",
+            "packaging/voice/whispercpp-runtime.json",
             "packaging/installer/Coven.iss",
             "scripts/build-windows.ps1",
             "scripts/smoke-windows.ps1",
             ".github/workflows/windows-build.yml",
         ]:
             self.assertTrue((ROOT / path).exists(), path)
+
+    def test_voice_runtime_manifest_uses_persistent_server(self):
+        manifest = json.loads((ROOT / "packaging" / "voice" / "whispercpp-runtime.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(manifest["runtime"]["expectedExecutable"], "whisper-server.exe")
 
     def test_python_package_discovery_is_explicit(self):
         source = (ROOT / "pyproject.toml").read_text(encoding="utf-8")

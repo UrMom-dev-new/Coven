@@ -173,6 +173,13 @@ def run_self_test(args: argparse.Namespace) -> int:
         ):
             raise DesktopSelfTestError("Seeded demo quest journal was not available.")
 
+        _append_self_test_log(log_path, "checking local voice status boundary")
+        status, _headers, body = _http_request("GET", f"{base_url}/api/voice/status", cookie=cookie)
+        voice_payload = _json_body(body, "Voice status")
+        voice = voice_payload.get("voice")
+        if status != 200 or not isinstance(voice, dict) or voice.get("engine") != "whisper.cpp":
+            raise DesktopSelfTestError("Local voice status boundary was not available.")
+
         _append_self_test_log(log_path, "checking approved reference image asset")
         status, headers, _body = _http_request("HEAD", f"{base_url}/assets/reference/coven-approved-reference.png")
         content_type = _header(headers, "Content-Type")

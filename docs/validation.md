@@ -41,16 +41,18 @@ Current tests cover:
 - Canvas sanctuary module visibility pause and station interaction event wiring.
 - Desktop unlock visibility after the pywebview API-ready event.
 - Desktop bridge one-time token behavior, packaged self-test source markers, Windows build self-test hook, installer artifact workflow hook and PyInstaller WebView backend collection.
-- Voice status boundary.
+- Local voice runtime/model readiness boundaries.
+- Local voice command routing, editable task/message draft behavior, WAV validation, cancellation, and stale transcription result handling.
 
 Most recent run in this environment:
 
 ```text
 python3 -m unittest discover -s tests
-Ran 63 tests in 0.062s - OK
+Ran 75 tests in 0.046s - OK
 
 /Users/nefarioususer/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check public/src/app.js / auth.js / api.js / dom.js / game.js / presentation.js
 python3 -m compileall coven tests
+python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-local-voice.log
 OK
 ```
 
@@ -86,7 +88,7 @@ POST /api/auth/session with token -> 201 and session cookie
 GET /api/status with cookie -> 200 demo runtime
 POST /api/tasks with cookie -> 201
 GET /api/failure-events after demo failure -> structured terminal_failure event
-GET /api/voice/status with cookie -> 200 structured unavailable status
+GET /api/voice/status with cookie -> 200 structured local whisper.cpp setup status
 ```
 
 Authenticated browser visual smoke performed on macOS development host after the approved-reference UI pass:
@@ -113,11 +115,12 @@ HEAD /styles.css -> 200 text/css, Cache-Control: no-store
 Desktop self-test smoke performed on macOS development host after the Windows packaging pass:
 
 ```text
-python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-office-govdash.log
+python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-local-voice.log
 GET /api/health -> 200
 POST /api/auth/session -> 201
 GET / -> 200
 GET /api/tasks -> 200
+GET /api/voice/status -> 200
 HEAD /assets/reference/coven-approved-reference.png -> 200
 HEAD /styles.css -> 200
 Coven desktop self-test passed.
@@ -131,7 +134,7 @@ Coven desktop self-test passed.
 - 1366x768 and 200 percent browser zoom on the target display.
 - Ollama local model smoke test, because the local service did not answer from this sandbox.
 - OpenAI live API test, because no credential was available.
-- Local transcription benchmark and installed Windows voices.
+- Local transcription benchmark, microphone permission, installed Windows voices, and target-machine WebView2 audio capture.
 - WebView2/Windows visual inspection after the approved-reference UI rewrite. macOS browser visual smoke passed, but Windows rendering remains unverified.
 - PyInstaller/pywebview bundle creation on Windows. The workflow/build script now runs `Coven.exe --self-test`, but that Windows runner has not been executed in this environment.
 - Inno Setup installer compile/install/upgrade/uninstall validation. The workflow now compiles an unsigned installer artifact after the portable smoke gate, but that workflow has not been executed from this environment.
