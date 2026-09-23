@@ -8,7 +8,12 @@ This implementation is intentionally dependency-light: Python 3.11+ standard lib
 
 ## Windows Download
 
-Private beta testers should download `Coven-Setup-x64.exe` and `Coven-Setup-x64.exe.sha256` from an approved GitHub release or workflow artifact for this private repository. Testers need repository access until a separately approved public binary-distribution repository exists.
+Private beta testers can download the current prerelease from [Coven 0.3.0-beta Windows beta](https://github.com/UrMom-dev-new/HermesAvatar/releases/tag/coven-v0.3.0-beta):
+
+- [Download `Coven-Setup-x64.exe`](https://github.com/UrMom-dev-new/HermesAvatar/releases/download/coven-v0.3.0-beta/Coven-Setup-x64.exe)
+- [Download `Coven-Setup-x64.exe.sha256`](https://github.com/UrMom-dev-new/HermesAvatar/releases/download/coven-v0.3.0-beta/Coven-Setup-x64.exe.sha256)
+
+This repository is private. Testers need repository access until a separately approved public binary-distribution repository exists.
 
 Click-only path:
 
