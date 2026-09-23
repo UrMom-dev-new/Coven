@@ -24,11 +24,32 @@ if (Test-Path $InstallDir) {
   Remove-Item -Recurse -Force $InstallDir
 }
 
+$InstallLog = Join-Path $env:TEMP "coven-installer-smoke.log"
+Remove-Item -Force $InstallLog -ErrorAction SilentlyContinue
+
 Write-Host "Installing Coven to $InstallDir"
-& $Installer /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/DIR=$InstallDir"
+$InstallArgs = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/LOG=$InstallLog", "/DIR=$InstallDir")
+$Process = Start-Process -FilePath (Resolve-Path $Installer) -ArgumentList $InstallArgs -Wait -PassThru
+if ($Process.ExitCode -ne 0) {
+  if (Test-Path $InstallLog) {
+    Get-Content $InstallLog | Select-Object -Last 80
+  }
+  throw "Installer exited with code $($Process.ExitCode)"
+}
 
 $Exe = Join-Path $InstallDir "Coven.exe"
+for ($Attempt = 0; $Attempt -lt 20 -and -not (Test-Path $Exe); $Attempt++) {
+  Start-Sleep -Milliseconds 500
+}
 if (-not (Test-Path $Exe)) {
+  if (Test-Path $InstallLog) {
+    Write-Host "Installer log tail:"
+    Get-Content $InstallLog | Select-Object -Last 120
+  }
+  if (Test-Path $InstallDir) {
+    Write-Host "Installed directory contents:"
+    Get-ChildItem -Recurse -Force $InstallDir | Select-Object -First 80 | Format-Table FullName
+  }
   throw "Installed executable was not found at $Exe"
 }
 
