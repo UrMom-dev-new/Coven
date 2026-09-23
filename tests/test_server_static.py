@@ -23,6 +23,15 @@ class ServerStaticTests(unittest.TestCase):
         self.assertIn('path.endswith("/audio")', source)
         self.assertIn("max_audio_bytes", source)
 
+    def test_setup_api_is_authenticated_and_write_intent_scoped(self):
+        source = (ROOT / "coven" / "server.py").read_text(encoding="utf-8")
+
+        self.assertIn("/api/setup/status", source)
+        self.assertIn("/api/setup/provider", source)
+        self.assertIn("/api/setup/workspace", source)
+        self.assertIn("self.app.setup.save_provider", source)
+        self.assertIn("has_write_intent", source)
+
 
 if __name__ == "__main__":
     unittest.main()

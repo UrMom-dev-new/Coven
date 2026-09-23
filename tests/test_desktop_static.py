@@ -24,6 +24,7 @@ class DesktopStaticTests(unittest.TestCase):
         self.assertIn("sanctuary-art", source)
         self.assertIn("Prepare project brief", source)
         self.assertIn("/api/voice/status", source)
+        self.assertIn("/api/setup/status", source)
         self.assertIn("Cache-Control", source)
         self.assertIn('getattr(sys, "frozen", False)', source)
         self.assertIn("os._exit(code)", source)
@@ -45,6 +46,9 @@ class DesktopStaticTests(unittest.TestCase):
         self.assertIn("ISCC.exe", installer_script)
         self.assertIn("Build installer artifact", workflow)
         self.assertIn("Coven-Windows-Installer", workflow)
+        self.assertIn("Coven-Setup-x64.exe", installer_script)
+        self.assertIn("Coven-Setup-x64.exe.sha256", installer_script)
+        self.assertIn("smoke-installer-windows.ps1", workflow)
 
     def test_pyinstaller_spec_collects_webview_backend_modules(self):
         spec = (ROOT / "packaging" / "Coven.spec").read_text(encoding="utf-8")
@@ -55,6 +59,15 @@ class DesktopStaticTests(unittest.TestCase):
         self.assertIn("collect_submodules(\"webview.platforms\")", spec)
         self.assertIn("hiddenimports=hiddenimports", spec)
         self.assertIn("packaging/voice", spec)
+
+    def test_desktop_native_startup_notices_and_folder_picker_exist(self):
+        source = (ROOT / "coven" / "desktop.py").read_text(encoding="utf-8")
+
+        self.assertIn("def native_notice", source)
+        self.assertIn("MessageBoxW", source)
+        self.assertIn("choose_folder", source)
+        self.assertIn("askdirectory", source)
+        self.assertIn("WOW6432Node", source)
 
 
 if __name__ == "__main__":

@@ -80,6 +80,50 @@
           </div>
           <div id="onboardingChecks" class="check-grid"></div>
         </section>
+        <section class="setup-wizard" aria-labelledby="setupWizardTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Windows setup</p>
+              <h2 id="setupWizardTitle">Guided setup</h2>
+            </div>
+            <button id="refreshSetupButton" class="ghost-button" type="button">Check again</button>
+          </div>
+          <ol id="setupSteps" class="setup-steps"></ol>
+          <div class="setup-actions" aria-label="Setup mode">
+            <button id="exploreDemoButton" type="button" class="secondary-button">Explore demo</button>
+            <button id="liveSetupButton" type="button" class="secondary-button">Use live Hermes</button>
+          </div>
+          <form id="providerSetupForm" class="setup-card">
+            <h3>Connect your AI provider</h3>
+            <label for="providerModel">Model</label>
+            <input id="providerModel" type="text" autocomplete="off" placeholder="gpt-5.6-terra or provider model id" />
+            <label for="providerApiKey">API key</label>
+            <input id="providerApiKey" type="password" autocomplete="off" placeholder="Stored with user-scoped Windows protection" />
+            <div class="action-row">
+              <button type="submit">Save credential</button>
+              <button id="removeProviderButton" type="button" class="secondary-button">Remove credential</button>
+            </div>
+          </form>
+          <form id="workspaceSetupForm" class="setup-card">
+            <h3>Choose your work folder</h3>
+            <label for="workspacePath">Folder</label>
+            <input id="workspacePath" type="text" placeholder="C:\Users\You\Documents\Coven Work" />
+            <div class="action-row">
+              <button id="chooseWorkspaceButton" type="button" class="secondary-button">Choose folder</button>
+              <button type="submit">Save folder</button>
+            </div>
+          </form>
+          <div class="setup-card">
+            <h3>Voice and maintenance</h3>
+            <p id="setupPrivacy" class="fine-print"></p>
+            <div class="action-row">
+              <button id="repairComponentsButton" type="button" class="secondary-button">Repair components</button>
+              <button id="checkUpdatesButton" type="button" class="secondary-button">Check updates</button>
+              <button id="supportBundleButton" type="button" class="secondary-button">Export diagnostics</button>
+              <button id="completeSetupButton" type="button">Finish setup</button>
+            </div>
+          </div>
+        </section>
       </section>
 
       <main class="workspace" id="workspace">

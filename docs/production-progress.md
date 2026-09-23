@@ -2,7 +2,26 @@
 
 Last updated: 2026-09-23
 
-Base commit for this continuation pass: `991c6010e8e543d8971aee6d5b10b86380679857`
+Base commit for this continuation pass: `2f6c9a52d3ccf1a40fd7ccdb7c9270c1db4dd499`
+
+## Implemented In The Windows Distribution Pass
+
+- Added single-source release metadata through `VERSION`, `coven/version.py` and generated Windows file metadata.
+- Renamed the primary installer asset to `Coven-Setup-x64.exe` and added `Coven-Setup-x64.exe.sha256`.
+- Added a manual draft-release workflow for an explicitly selected ref with tests, packaged executable smoke, installer build, checksum generation and draft asset upload.
+- Added unattended installer smoke that installs to a disposable path with spaces/non-ASCII text, runs the installed executable self-test, and uninstalls.
+- Added first-run setup APIs and Settings wizard controls for:
+  - computer/WebView2/Hermes/provider/workspace/voice readiness
+  - Explore demo vs live setup
+  - provider credential save/remove without renderer storage
+  - desktop folder picker-backed workspace selection
+  - repair request, update link and redacted support bundle export
+- Added Windows DPAPI-backed secret storage for provider credentials, with a restricted development fallback outside the shipping Windows boundary.
+- Added native pre-WebView notices for missing WebView2, duplicate launch and startup failure.
+- Added `packaging/hermes-runtime.json` with the pinned Hermes release target `v2026.9.21` and WebView2 Evergreen detection/distribution notes.
+- Connected first-run workspace selection to the artifact-validation workspace boundary.
+- Added `docs/windows-install-guide.md` and `docs/release-notes.md`.
+- Added tests for setup state, secret redaction, dynamic workspace roots, setup API markers, frontend setup routing, runtime manifests and startup notices.
 
 ## Implemented In The Local Voice Commands Pass
 
@@ -137,11 +156,12 @@ Base commit for this continuation pass: `991c6010e8e543d8971aee6d5b10b8638067985
   - `HEAD /assets/reference/coven-approved-reference.png` returned `200 image/png` with cacheable image headers
   - `HEAD /styles.css` returned `200 text/css` with `Cache-Control: no-store`
 - Headless desktop self-test passed from the source tree:
-  - `python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-local-voice.log`
+  - `python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-first-run.log`
   - local desktop service booted
   - session bootstrap returned `201`
   - authenticated app shell returned approved-reference UI markers
   - seeded demo tasks were available
+  - first-run setup status boundary returned `200`
   - local voice status boundary returned `200`
   - approved reference PNG and CSS `HEAD` checks passed
 - New targeted unit coverage includes Hermes empty chat responses, long assistant output persistence, pre-dispatch validation, uncertain delivery state, live run submission/reconciliation shape, lost-response recovery, idempotency conflict rejection, stale terminal-update protection, runtime API readiness gates, live terminal failure event de-duplication, artifact inspection, integration status/config validation and installer workflow markers.

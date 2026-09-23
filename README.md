@@ -6,7 +6,23 @@ Coven is a local gothic adventure-game shell for a Hermes Agent workspace. It st
 
 This implementation is intentionally dependency-light: Python 3.11+ standard library for the loopback server and static browser assets for the UI, with optional pywebview/PyInstaller dependencies for the Windows desktop shell. Live Hermes chat and task dispatch are routed through a clear adapter boundary when the API server is configured and advertises the Runs API. Demo mode is explicit and separate.
 
-## Run
+## Windows Download
+
+Private beta testers should download `Coven-Setup-x64.exe` and `Coven-Setup-x64.exe.sha256` from an approved GitHub release or workflow artifact for this private repository. Testers need repository access until a separately approved public binary-distribution repository exists.
+
+Click-only path:
+
+1. Download `Coven-Setup-x64.exe`.
+2. Double-click the installer and install for the current Windows user.
+3. Leave `Launch Coven` selected at the end of setup.
+4. In Coven, use `Settings -> Guided setup` to check the PC, save your own provider credential, choose a work folder, optionally enable voice, and finish setup.
+5. Use `Explore demo` only for the isolated demo workspace. Demo success is not proof of live Hermes execution.
+
+The installer is an unsigned beta unless the release notes explicitly say an Authenticode signing certificate was configured for that build. Do not disable Windows security as a normal installation step.
+
+See `docs/windows-install-guide.md` for checksum verification, private-release download rules, setup screens, repair, update, and uninstall notes.
+
+## Developer Run
 
 From the repository root:
 
@@ -100,6 +116,7 @@ Additional beta docs:
 
 - `docs/product-contract.md`
 - `docs/desktop-build.md`
+- `docs/windows-install-guide.md`
 - `docs/local-voice.md`
 - `docs/hermes-compatibility.md`
 - `docs/windows-beta-acceptance.md`

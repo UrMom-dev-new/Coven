@@ -12,18 +12,22 @@ No Windows VM, Dell Inspiron, WebView2 runtime, Hermes install, microphone hardw
 - Windows build script: `scripts/build-windows.ps1`.
 - Inno Setup script: `packaging/installer/Coven.iss`.
 - Installer build script: `scripts/build-installer.ps1`.
+- Installer smoke script: `scripts/smoke-installer-windows.ps1`.
 - GitHub Actions Windows build workflow: `.github/workflows/windows-build.yml`.
+- Manual draft-release workflow: `.github/workflows/windows-release-draft.yml`.
 - Authenticated development-browser fallback: `python -m coven.desktop --browser`.
 - Headless desktop boot smoke: `python -m coven.desktop --self-test`.
 - Portable executable smoke gate: `dist\Coven\Coven.exe --self-test` from `scripts/build-windows.ps1` and the Windows workflow.
-- Unsigned installer compile gate: `scripts\build-installer.ps1` and the Windows workflow after the portable smoke gate.
+- Unsigned installer compile/checksum gate: `scripts\build-installer.ps1` produces `Coven-Setup-x64.exe` and `.sha256`.
+- Unattended installer install/self-test/uninstall gate: `scripts\smoke-installer-windows.ps1`.
+- First-run setup APIs and Settings wizard for provider credential save, workspace selection, repair, update link and diagnostics.
 - Local voice service boundary, command router and packaging manifest for manually installed whisper.cpp runtime/model assets.
 
 ## Acceptance Scenarios
 
 | Scenario | Status | Evidence / blocker |
 |---|---|---|
-| Fresh install -> onboarding -> real API chat -> real scoped task -> verifiable output | Unverified | Requires Windows build, Hermes API server and provider credentials. |
+| Fresh install -> onboarding -> real API chat -> real scoped task -> verifiable output | Partial | First-run setup wizard and unattended installer smoke are implemented. Real provider-backed Hermes execution still requires Windows hardware/VM, credentials and app-owned Hermes runtime verification. |
 | Local-model chat/task | Unverified | Local/API route selection is implemented, but Ollama and Hermes local-provider execution were not verified on Windows. |
 | Sanctuary exploration and compact work view | Partially implemented | Canvas movement, station interaction and approved-reference UI shell smoke are implemented; real WebView2/Windows visual QA remains. |
 | Needs-input/approval/cancel/retry/evidence preservation | Partial | Live stop, approval, retry, evidence and artifact fields are implemented against the documented Runs API and deterministic mocks; live Hermes proof remains blocked. |
@@ -35,9 +39,9 @@ No Windows VM, Dell Inspiron, WebView2 runtime, Hermes install, microphone hardw
 | Controlled terminal failure -> one Ophelia scene -> report -> recovery | Fixture-tested at API level | Demo and live-store terminal failure de-duplication are unit-tested; browser playback on Windows remains unverified. |
 | Voice round-trip | Partial | WebView captures WAV audio and sends it to the local whisper.cpp service boundary; command routing, drafts, cancellation and stale-result handling are source-tested. Runtime/model installation, microphone permission, installed voices and transcription quality remain unverified on Windows hardware. |
 | Restart during run, provider disconnect/reconnect, sleep/resume, duplicate launch | Partial | Single-instance guard, background run reconciliation via `GET /v1/runs/{run_id}` and lost-submission recovery are implemented; real gateway interruption/retention behavior requires Hermes. |
-| Missing model/key/WebView2/malformed events/hostile HTML/unauthorized local requests | Partial | Auth/origin/malformed event/HTML regressions tested; WebView2 missing path is code-only. |
+| Missing model/key/WebView2/malformed events/hostile HTML/unauthorized local requests | Partial | Auth/origin/malformed event/HTML regressions tested; WebView2 missing path now shows a native pre-WebView notice, but installer bootstrapper execution must be verified on Windows. |
 | Portable executable boots authenticated app shell | Source-tested, Windows pending | `python -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-final.log` passed on macOS source tree; Windows CI runs packaged `Coven.exe --self-test` when pushed. |
-| Installer compile, fresh install, upgrade/uninstall/reinstall with retained data, paths with spaces/non-ASCII, standard user, high DPI | Partially implemented | CI now compiles an unsigned Inno Setup installer artifact; clean Windows VM install/upgrade/uninstall remains blocked. |
+| Installer compile, fresh install, upgrade/uninstall/reinstall with retained data, paths with spaces/non-ASCII, standard user, high DPI | Partially implemented | CI compiles unsigned `Coven-Setup-x64.exe`, writes a checksum, installs into a disposable path with spaces/non-ASCII, runs installed self-test and uninstalls. Clean interactive Windows VM install/upgrade/high-DPI acceptance remains blocked. |
 
 ## Engineering Targets To Measure
 

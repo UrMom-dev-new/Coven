@@ -30,6 +30,20 @@ class DesktopBridge:
         self._used = True
         return self._token
 
+    def choose_folder(self) -> str:
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            selected = filedialog.askdirectory(title="Choose a Coven work folder")
+            root.destroy()
+            return selected or ""
+        except Exception:
+            return ""
+
 
 class DesktopSelfTestError(RuntimeError):
     """Raised when the packaged desktop smoke path fails."""
@@ -180,6 +194,13 @@ def run_self_test(args: argparse.Namespace) -> int:
         if status != 200 or not isinstance(voice, dict) or voice.get("engine") != "whisper.cpp":
             raise DesktopSelfTestError("Local voice status boundary was not available.")
 
+        _append_self_test_log(log_path, "checking first-run setup status boundary")
+        status, _headers, body = _http_request("GET", f"{base_url}/api/setup/status", cookie=cookie)
+        setup_payload = _json_body(body, "Setup status")
+        setup = setup_payload.get("setup")
+        if status != 200 or not isinstance(setup, dict) or not setup.get("version"):
+            raise DesktopSelfTestError("First-run setup status boundary was not available.")
+
         _append_self_test_log(log_path, "checking approved reference image asset")
         status, headers, _body = _http_request("HEAD", f"{base_url}/assets/reference/coven-approved-reference.png")
         content_type = _header(headers, "Content-Type")
@@ -222,18 +243,36 @@ def detect_webview2() -> tuple[bool, str]:
         import winreg
 
         keys = [
-            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"),
-            (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}", 0),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}", winreg.KEY_WOW64_64KEY),
+            (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}", 0),
         ]
-        for hive, path in keys:
+        for hive, path, view in keys:
             try:
-                with winreg.OpenKey(hive, path):
-                    return True, "WebView2 Evergreen Runtime was found in the registry."
+                with winreg.OpenKey(hive, path, 0, winreg.KEY_READ | view) as key:
+                    value, _kind = winreg.QueryValueEx(key, "pv")
+                    version = str(value or "").strip()
+                    if version and version != "0.0.0.0":
+                        return True, f"WebView2 Evergreen Runtime {version} was found."
             except FileNotFoundError:
+                continue
+            except OSError:
                 continue
     except Exception as exc:  # pragma: no cover - Windows-only branch
         return False, f"WebView2 registry check failed: {exc}"
     return False, "WebView2 Evergreen Runtime was not found."
+
+
+def native_notice(title: str, message: str) -> None:
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            ctypes.windll.user32.MessageBoxW(None, message, title, 0x00000010)
+            return
+        except Exception:
+            pass
+    _self_test_print(f"{title}: {message}", error=True)
 
 
 def run_desktop(args: argparse.Namespace) -> int:
@@ -244,7 +283,7 @@ def run_desktop(args: argparse.Namespace) -> int:
     data_dir.mkdir(parents=True, exist_ok=True)
     lock = current_user_instance(APP_NAME, runtime_dir() / "instance.lock")
     if not lock.acquire():
-        print("Coven is already running for this Windows user.")
+        native_notice("Coven is already running", "Coven is already open for this Windows user. Use the existing window, or close it before launching again.")
         return 2
 
     token = args.auth_token or os.environ.get("COVEN_DEV_AUTH_TOKEN") or os.urandom(24).hex()
@@ -271,8 +310,10 @@ def run_desktop(args: argparse.Namespace) -> int:
 
         ok, message = detect_webview2()
         if os.name == "nt" and not ok:
-            print(message)
-            print("Install Microsoft Edge WebView2 Evergreen Runtime, then launch Coven again.")
+            native_notice(
+                "Coven needs WebView2",
+                f"{message}\n\nInstall the Microsoft Edge WebView2 Evergreen Runtime, then launch Coven again. The Coven installer can be repaired after WebView2 is installed.",
+            )
             return 3
 
         webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
@@ -322,6 +363,7 @@ def main(argv: list[str] | None = None) -> int:
             return code
         return run_desktop(args)
     except Exception as exc:
+        native_notice("Coven startup failed", f"{exc}\n\nTry launching Coven again, or reinstall/repair the app from the Windows installer.")
         print(f"Coven startup failed: {exc}", file=sys.stderr)
         return 1
 

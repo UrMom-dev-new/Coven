@@ -21,6 +21,8 @@ from .configuration import ConfigError, load_app_config
 from .integrations import IntegrationManager
 from .reconciler import TaskReconciler
 from .runtime import RuntimeInspector
+from .secrets import SecretStoreError
+from .setup import SetupManager
 from .store import CovenStore
 from .voice import VoiceError, VoiceService
 
@@ -57,6 +59,7 @@ class CovenHTTPServer(ThreadingHTTPServer):
     namespace: str
     agent_adapter: object
     voice: VoiceService
+    setup: SetupManager
     integrations: IntegrationManager
     reconciler: TaskReconciler | None
 
@@ -209,6 +212,9 @@ class CovenHandler(BaseHTTPRequestHandler):
         elif path == "/api/settings":
             if self._require_auth():
                 self._send_json({"settings": self.app.store.preferences()})
+        elif path == "/api/setup/status":
+            if self._require_auth():
+                self._send_json({"setup": self.app.setup.status()})
         elif path == "/api/voice/status":
             if self._require_auth():
                 self._send_json({"voice": self.app.voice.status()})
@@ -345,6 +351,22 @@ class CovenHandler(BaseHTTPRequestHandler):
                 )
             elif path == "/api/settings":
                 self._send_json({"settings": self.app.store.update_preferences(body)})
+            elif path == "/api/setup/mode":
+                self._send_json({"setup": self.app.setup.choose_mode(body)})
+            elif path == "/api/setup/provider":
+                self._send_json({"setup": self.app.setup.save_provider(body)})
+            elif path == "/api/setup/provider/remove":
+                self._send_json({"setup": self.app.setup.remove_provider()})
+            elif path == "/api/setup/workspace":
+                setup = self.app.setup.save_workspace(body)
+                self.app.integrations.set_dynamic_workspace_roots(self.app.setup.workspace_roots())
+                self._send_json({"setup": setup})
+            elif path == "/api/setup/complete":
+                self._send_json({"setup": self.app.setup.complete()})
+            elif path == "/api/setup/repair":
+                self._send_json({"setup": self.app.setup.repair()})
+            elif path == "/api/setup/support-bundle":
+                self._send_json({"support": self.app.setup.support_bundle()})
             elif path == "/api/voice/start":
                 self._send_json(self.app.voice.start_session(body), HTTPStatus.CREATED)
             elif path.startswith("/api/voice/sessions/") and path.endswith("/cancel"):
@@ -373,7 +395,7 @@ class CovenHandler(BaseHTTPRequestHandler):
             self._send_error_json(HTTPStatus.CONFLICT, str(exc), code=exc.code, details=exc.details)
         except KeyError:
             self._send_error_json(HTTPStatus.NOT_FOUND, "Requested item was not found.", code="not_found")
-        except (ValueError, ConfigError, json.JSONDecodeError) as exc:
+        except (ValueError, ConfigError, SecretStoreError, json.JSONDecodeError) as exc:
             self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc), code="bad_request")
 
     def _serve_static(self, path: str, *, send_body: bool = True) -> None:
@@ -426,7 +448,9 @@ def build_server(
     server.namespace = "demo" if config.demo_mode else "live"
     server.agent_adapter = build_agent_adapter(config, server.store)
     server.voice = VoiceService(config, data_dir=data_dir, profile_path=PROFILE_PATH)
+    server.setup = SetupManager(config=config, data_dir=data_dir, voice=server.voice)
     server.integrations = IntegrationManager(config)
+    server.integrations.set_dynamic_workspace_roots(server.setup.workspace_roots())
     server.reconciler = None
     if server.namespace == "live" and hasattr(server.agent_adapter, "refresh_tasks"):
         server.reconciler = TaskReconciler(server.agent_adapter)

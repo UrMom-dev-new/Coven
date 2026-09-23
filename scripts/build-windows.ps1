@@ -19,6 +19,9 @@ Write-Host "Installing Windows desktop dependencies..."
 python -m pip install --upgrade pip
 python -m pip install -e ".[desktop]"
 
+Write-Host "Generating Windows version metadata..."
+python scripts\generate-version-info.py
+
 Write-Host "Building Coven portable bundle with PyInstaller..."
 python -m PyInstaller packaging\Coven.spec --noconfirm --clean
 

@@ -22,14 +22,21 @@ class AssetReleaseTests(unittest.TestCase):
 
     def test_windows_packaging_files_exist(self):
         for path in [
+            "VERSION",
             "coven/desktop.py",
+            "coven/setup.py",
+            "coven/secrets.py",
             "packaging/Coven.spec",
             "packaging/pyinstaller_runtime_hook.py",
+            "packaging/hermes-runtime.json",
             "packaging/voice/whispercpp-runtime.json",
             "packaging/installer/Coven.iss",
+            "scripts/generate-version-info.py",
             "scripts/build-windows.ps1",
             "scripts/smoke-windows.ps1",
+            "scripts/smoke-installer-windows.ps1",
             ".github/workflows/windows-build.yml",
+            ".github/workflows/windows-release-draft.yml",
         ]:
             self.assertTrue((ROOT / path).exists(), path)
 
@@ -37,6 +44,12 @@ class AssetReleaseTests(unittest.TestCase):
         manifest = json.loads((ROOT / "packaging" / "voice" / "whispercpp-runtime.json").read_text(encoding="utf-8"))
 
         self.assertEqual(manifest["runtime"]["expectedExecutable"], "whisper-server.exe")
+
+    def test_hermes_runtime_manifest_is_pinned(self):
+        manifest = json.loads((ROOT / "packaging" / "hermes-runtime.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(manifest["hermes"]["tag"], "v2026.9.21")
+        self.assertIn("EdgeUpdate", manifest["webView2"]["detection"])
 
     def test_python_package_discovery_is_explicit(self):
         source = (ROOT / "pyproject.toml").read_text(encoding="utf-8")

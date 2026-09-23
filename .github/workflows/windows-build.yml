@@ -38,6 +38,10 @@ jobs:
         shell: pwsh
         timeout-minutes: 8
         run: .\scripts\build-installer.ps1
+      - name: Smoke installer install/self-test/uninstall
+        shell: pwsh
+        timeout-minutes: 4
+        run: .\scripts\smoke-installer-windows.ps1 -TimeoutSeconds 45
       - uses: actions/upload-artifact@v4
         with:
           name: Coven-Windows-Portable
@@ -45,4 +49,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Coven-Windows-Installer
-          path: dist/installer/CovenSetup-*.exe
+          path: |
+            dist/installer/Coven-Setup-x64.exe
+            dist/installer/Coven-Setup-x64.exe.sha256

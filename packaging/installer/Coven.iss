@@ -1,5 +1,7 @@
 #define MyAppName "Coven"
-#define MyAppVersion "0.2.0-beta"
+#ifndef MyAppVersion
+#define MyAppVersion "0.0.0-dev"
+#endif
 #define MyAppPublisher "HermesAvatar"
 #define MyAppExeName "Coven.exe"
 
@@ -11,7 +13,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\Coven
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-OutputBaseFilename=CovenSetup-{#MyAppVersion}
+OutputBaseFilename=Coven-Setup-x64
 Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=lowest
@@ -24,6 +26,10 @@ Source: "..\..\dist\Coven\*"; DestDir: "{app}"; Flags: ignoreversion recursesubd
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+[Tasks]
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent

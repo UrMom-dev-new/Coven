@@ -41,6 +41,7 @@ Current tests cover:
 - Canvas sanctuary module visibility pause and station interaction event wiring.
 - Desktop unlock visibility after the pywebview API-ready event.
 - Desktop bridge one-time token behavior, packaged self-test source markers, Windows build self-test hook, installer artifact workflow hook and PyInstaller WebView backend collection.
+- First-run setup status, DPAPI-backed secret boundary, workspace validation, redacted support bundle, native startup notices, stable installer/checksum artifact names and unattended installer smoke workflow markers.
 - Local voice runtime/model readiness boundaries.
 - Local voice command routing, editable task/message draft behavior, WAV validation, cancellation, and stale transcription result handling.
 
@@ -48,11 +49,11 @@ Most recent run in this environment:
 
 ```text
 python3 -m unittest discover -s tests
-Ran 75 tests in 0.046s - OK
+Ran 83 tests in 0.088s - OK
 
 /Users/nefarioususer/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --check public/src/app.js / auth.js / api.js / dom.js / game.js / presentation.js
 python3 -m compileall coven tests
-python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-local-voice.log
+python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-first-run.log
 OK
 ```
 
@@ -115,11 +116,12 @@ HEAD /styles.css -> 200 text/css, Cache-Control: no-store
 Desktop self-test smoke performed on macOS development host after the Windows packaging pass:
 
 ```text
-python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-local-voice.log
+python3 -m coven.desktop --self-test --self-test-log /private/tmp/coven-desktop-self-test-first-run.log
 GET /api/health -> 200
 POST /api/auth/session -> 201
 GET / -> 200
 GET /api/tasks -> 200
+GET /api/setup/status -> 200
 GET /api/voice/status -> 200
 HEAD /assets/reference/coven-approved-reference.png -> 200
 HEAD /styles.css -> 200
