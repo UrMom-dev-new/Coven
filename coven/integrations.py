@@ -77,6 +77,10 @@ class IntegrationStatus:
 class IntegrationManager:
     def __init__(self, config: AppConfig):
         self.config = config
+        self.dynamic_workspace_roots: tuple[Path, ...] = ()
+
+    def set_dynamic_workspace_roots(self, roots: tuple[Path, ...]) -> None:
+        self.dynamic_workspace_roots = roots
 
     def status(self) -> dict[str, Any]:
         return {
@@ -88,7 +92,7 @@ class IntegrationManager:
         }
 
     def workspace_status(self) -> dict[str, Any]:
-        roots = [str(root) for root in self.config.workspace.allowed_roots]
+        roots = [str(root) for root in self._allowed_roots()]
         notes = [] if roots else ["No permitted workspace roots are configured; artifact inspection will not validate local paths."]
         return {
             "configured": bool(roots),
@@ -186,7 +190,17 @@ class IntegrationManager:
         }
 
     def validate_artifact_claims(self, artifacts: list[Any]) -> list[dict[str, Any]]:
-        return validate_artifacts(artifacts, allowed_roots=self.config.workspace.allowed_roots)
+        return validate_artifacts(artifacts, allowed_roots=self._allowed_roots())
+
+    def _allowed_roots(self) -> tuple[Path, ...]:
+        seen = set()
+        roots = []
+        for root in (*self.config.workspace.allowed_roots, *self.dynamic_workspace_roots):
+            key = str(root)
+            if key not in seen:
+                seen.add(key)
+                roots.append(root)
+        return tuple(roots)
 
     def execute_office_operation(self, operation: str, payload: dict[str, Any]) -> dict[str, Any]:
         if operation == "files.validate_artifacts":

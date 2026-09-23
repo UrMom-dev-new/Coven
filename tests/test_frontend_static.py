@@ -33,6 +33,16 @@ class FrontendStaticTests(unittest.TestCase):
         self.assertIn("/api/voice/start", source)
         self.assertIn("encodeWav", source)
 
+    def test_setup_wizard_uses_backend_secret_storage(self):
+        source = (ROOT / "public" / "src" / "app.js").read_text(encoding="utf-8")
+        html = (ROOT / "public" / "index.html").read_text(encoding="utf-8")
+
+        self.assertIn("/api/setup/provider", source)
+        self.assertIn("/api/setup/workspace", source)
+        self.assertIn("choose_folder", source)
+        self.assertIn("providerApiKey", html)
+        self.assertNotIn("localStorage", source[source.find("saveProviderCredential") : source.find("removeProviderCredential")])
+
 
 if __name__ == "__main__":
     unittest.main()

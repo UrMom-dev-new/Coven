@@ -1,0 +1,70 @@
+name: Windows draft release
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tested commit SHA or tag to package"
+        required: true
+      prerelease:
+        description: "Mark the draft as a prerelease"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  draft-release:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run tests
+        run: python -m unittest discover -s tests
+      - name: Build portable bundle
+        shell: pwsh
+        timeout-minutes: 20
+        run: .\scripts\build-windows.ps1 -Clean -SkipSmoke
+      - name: Smoke executable boot path
+        shell: pwsh
+        timeout-minutes: 2
+        run: .\scripts\smoke-windows.ps1 -Exe .\dist\Coven\Coven.exe -Token release-smoke-token -TimeoutSeconds 45
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+      - name: Build installer and checksum
+        shell: pwsh
+        timeout-minutes: 8
+        run: .\scripts\build-installer.ps1
+      - name: Smoke installer install/self-test/uninstall
+        shell: pwsh
+        timeout-minutes: 4
+        run: .\scripts\smoke-installer-windows.ps1 -TimeoutSeconds 45
+      - name: Create draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $Version = (Get-Content .\VERSION -Raw).Trim()
+          $Tag = "coven-v$Version"
+          $Notes = @"
+          Coven $Version Windows beta
+
+          Private repository beta: testers need repository access to download this draft/prerelease asset.
+
+          Assets:
+          - Coven-Setup-x64.exe
+          - Coven-Setup-x64.exe.sha256
+
+          This workflow packages the selected ref `${{ inputs.ref }}` after tests, packaged executable smoke, installer build and checksum generation.
+          "@
+          $Args = @("release", "create", $Tag, ".\dist\installer\Coven-Setup-x64.exe", ".\dist\installer\Coven-Setup-x64.exe.sha256", "--target", "${{ inputs.ref }}", "--title", "Coven $Version Windows beta", "--notes", $Notes, "--draft")
+          if ("${{ inputs.prerelease }}" -eq "true") {
+            $Args += "--prerelease"
+          }
+          gh @Args

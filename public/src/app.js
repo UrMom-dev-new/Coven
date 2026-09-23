@@ -23,6 +23,7 @@ const state = {
   recording: null,
   voiceStatus: null,
   voiceCommands: [],
+  setupStatus: null,
   voiceHoldTimer: null,
   voiceDrafts: {},
   messageDrafts: {},
@@ -73,6 +74,7 @@ function renderOnboarding() {
     ["Hardware", `${state.status.hardware?.system || "unknown"} ${state.status.hardware?.machine || ""}, ${state.status.hardware?.memory || "memory unknown"}`],
     ["Workspace", workspaceSummary()],
     ["Voice", voiceSummary()],
+    ["Setup", setupSummary()],
   ];
   for (const [title, text] of items) {
     host.append(node("div", { className: "check-item" }, [node("b", { text: title }), node("span", { text })]));
@@ -107,6 +109,14 @@ function voiceSummary() {
   if (!voice.enabled) return "Disabled.";
   if (voice.state === "ready") return `${voice.model?.label || voice.model?.profile || "Whisper model"} ready locally.`;
   return (voice.notes && voice.notes[0]) || "Local voice setup is required.";
+}
+
+function setupSummary() {
+  const setup = state.setupStatus;
+  if (!setup) return "Checking first-run setup.";
+  if (setup.setupComplete) return "Setup complete.";
+  const pending = (setup.steps || []).filter((step) => step.state !== "ready" && step.state !== "optional" && step.state !== "unverified");
+  return pending.length ? `${pending.length} setup step(s) need attention.` : "Ready to finish setup.";
 }
 
 function captureUiPosition() {
@@ -151,6 +161,13 @@ async function refreshStatus(force = false) {
   renderOnboarding();
 }
 
+async function refreshSetupStatus() {
+  const payload = await api("/api/setup/status");
+  state.setupStatus = payload.setup;
+  renderSetupWizard();
+  renderOnboarding();
+}
+
 async function refreshVoiceStatus() {
   const [statusPayload, commandsPayload] = await Promise.all([
     api("/api/voice/status"),
@@ -161,6 +178,120 @@ async function refreshVoiceStatus() {
   renderVoiceCommands();
   updateVoiceAvailability();
   renderOnboarding();
+}
+
+function renderSetupWizard() {
+  const setup = state.setupStatus;
+  const list = $("setupSteps");
+  if (!setup || !list) return;
+  clear(list);
+  $("setupPrivacy").textContent = setup.privacy || "";
+  for (const step of setup.steps || []) {
+    list.append(node("li", { className: `setup-step setup-${step.state || "unknown"}` }, [
+      node("b", { text: step.label || step.id }),
+      node("span", { text: step.summary || "" }),
+      node("em", { text: statusLabel(step.state || "unknown") }),
+    ]));
+  }
+  document.body.dataset.setupComplete = String(Boolean(setup.setupComplete));
+}
+
+async function chooseSetupMode(mode) {
+  try {
+    const payload = await postJson("/api/setup/mode", { mode });
+    state.setupStatus = payload.setup;
+    renderSetupWizard();
+    setNotice(mode === "demo" ? "Demo exploration is enabled. Live execution still requires setup." : "Live setup selected.", "info");
+  } catch (error) {
+    setNotice(error.message, "error");
+  }
+}
+
+async function saveProviderCredential(event) {
+  event.preventDefault();
+  try {
+    const payload = await postJson("/api/setup/provider", {
+      model: $("providerModel").value.trim(),
+      apiKey: $("providerApiKey").value,
+    });
+    $("providerApiKey").value = "";
+    state.setupStatus = payload.setup;
+    renderSetupWizard();
+    setNotice("Credential saved outside renderer storage. Run the connection test before assigning live work.", "info");
+  } catch (error) {
+    setNotice(error.message, "error");
+  }
+}
+
+async function removeProviderCredential() {
+  try {
+    const payload = await postJson("/api/setup/provider/remove", {});
+    state.setupStatus = payload.setup;
+    renderSetupWizard();
+    setNotice("Provider credential removed.", "info");
+  } catch (error) {
+    setNotice(error.message, "error");
+  }
+}
+
+async function chooseWorkspaceFolder() {
+  if (window.pywebview?.api?.choose_folder) {
+    const selected = await window.pywebview.api.choose_folder();
+    if (selected) $("workspacePath").value = selected;
+    return;
+  }
+  setNotice("Folder picker is available in the Windows desktop shell. Paste a folder path here in browser mode.", "warn");
+}
+
+async function saveWorkspace(event) {
+  event.preventDefault();
+  try {
+    const payload = await postJson("/api/setup/workspace", { path: $("workspacePath").value.trim() });
+    state.setupStatus = payload.setup;
+    renderSetupWizard();
+    setNotice("Work folder saved and verified writable.", "info");
+  } catch (error) {
+    setNotice(error.message, "error");
+  }
+}
+
+async function repairComponents() {
+  try {
+    const payload = await postJson("/api/setup/repair", {});
+    state.setupStatus = payload.setup;
+    renderSetupWizard();
+    setNotice("Repair requested. Coven will re-check app-owned components on the next Windows setup run.", "info");
+  } catch (error) {
+    setNotice(error.message, "error");
+  }
+}
+
+async function exportSupportBundle() {
+  try {
+    const payload = await postJson("/api/setup/support-bundle", {});
+    setNotice(`Diagnostics exported: ${payload.support?.path || "support bundle created"}`, "info");
+  } catch (error) {
+    setNotice(error.message, "error");
+  }
+}
+
+function checkForUpdates() {
+  const page = state.setupStatus?.release?.downloadPage || "https://github.com/UrMom-dev-new/HermesAvatar/releases";
+  window.open(page, "_blank", "noopener");
+}
+
+async function completeSetup() {
+  try {
+    const payload = await postJson("/api/setup/complete", {});
+    state.setupStatus = payload.setup;
+    renderSetupWizard();
+    setNotice(
+      state.setupStatus.setupComplete ? "Setup complete. Welcome to the Sanctuary." : "Setup is saved, but some live prerequisites still need attention.",
+      state.setupStatus.setupComplete ? "info" : "warn",
+    );
+  } catch (error) {
+    setNotice(error.message, "error");
+  }
 }
 
 async function refreshSettings() {
@@ -1151,6 +1282,17 @@ function bindEvents() {
     button.addEventListener("click", () => setActiveView(button.dataset.view || "sanctuary"));
   });
   $("dismissOnboarding").addEventListener("click", () => document.querySelector(".onboarding-panel")?.classList.add("dismissed"));
+  $("refreshSetupButton").addEventListener("click", () => refreshSetupStatus().catch((error) => setNotice(error.message, "error")));
+  $("exploreDemoButton").addEventListener("click", () => chooseSetupMode("demo"));
+  $("liveSetupButton").addEventListener("click", () => chooseSetupMode("live"));
+  $("providerSetupForm").addEventListener("submit", saveProviderCredential);
+  $("removeProviderButton").addEventListener("click", removeProviderCredential);
+  $("workspaceSetupForm").addEventListener("submit", saveWorkspace);
+  $("chooseWorkspaceButton").addEventListener("click", () => chooseWorkspaceFolder().catch((error) => setNotice(error.message, "error")));
+  $("repairComponentsButton").addEventListener("click", repairComponents);
+  $("checkUpdatesButton").addEventListener("click", checkForUpdates);
+  $("supportBundleButton").addEventListener("click", exportSupportBundle);
+  $("completeSetupButton").addEventListener("click", completeSetup);
   document.querySelectorAll(".journal-tab").forEach((button) => {
     button.addEventListener("click", () => {
       state.taskFilter = button.dataset.filter || "all";
@@ -1192,6 +1334,7 @@ async function refreshAll({ forceRuntime = false } = {}) {
   const position = captureUiPosition();
   try {
     await refreshStatus(forceRuntime);
+    await refreshSetupStatus();
     await refreshVoiceStatus();
     await refreshSettings();
     await refreshTasks();
@@ -1226,6 +1369,7 @@ async function init() {
   });
   $("sanctuaryCanvas").addEventListener("coven-select-witch", (event) => selectWitch(event.detail.id));
   await refreshStatus();
+  await refreshSetupStatus();
   await refreshVoiceStatus();
   await refreshSettings();
   await refreshProfiles();

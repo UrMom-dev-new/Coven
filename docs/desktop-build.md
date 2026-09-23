@@ -25,7 +25,7 @@ On Windows, Coven checks for the WebView2 Evergreen Runtime and asks the user to
 python -m coven.desktop --self-test
 ```
 
-The self-test runs in isolated demo mode, starts the local authenticated service, creates a session through the desktop auth path, checks the app shell for the approved-reference UI markers, verifies seeded Quest Journal data, and validates the approved reference image plus static cache headers. It exits without opening pywebview.
+The self-test runs in isolated demo mode, starts the local authenticated service, creates a session through the desktop auth path, checks the app shell for the approved-reference UI markers, verifies seeded Quest Journal data, validates first-run setup and voice status boundaries, and validates the approved reference image plus static cache headers. It exits without opening pywebview.
 
 The PowerShell launcher can run the same source-tree smoke:
 
@@ -69,9 +69,12 @@ The Inno Setup script is at `packaging/installer/Coven.iss`. It expects the PyIn
 Expected output:
 
 ```text
-dist\installer\CovenSetup-0.2.0-beta.exe
+dist\installer\Coven-Setup-x64.exe
+dist\installer\Coven-Setup-x64.exe.sha256
 ```
 
-The GitHub Actions Windows workflow installs Inno Setup, compiles this installer, and uploads it as `Coven-Windows-Installer` after the packaged executable self-test succeeds. That is an installer compile gate, not a clean-machine install/upgrade/uninstall acceptance gate.
+The GitHub Actions Windows workflow installs Inno Setup, compiles this installer, writes the SHA-256 checksum, installs the installer into a disposable per-user directory with a path containing spaces/non-ASCII text, runs the installed executable self-test, uninstalls it, and uploads `Coven-Windows-Installer` after those gates pass. That is still unattended installer smoke, not a full clean-machine interactive acceptance gate.
+
+Manual draft releases use `.github/workflows/windows-release-draft.yml` with an explicitly selected ref. The release stays draft/prerelease and private unless separately approved.
 
 Unsigned beta builds must be labeled unsigned. Do not ask users to disable Windows security.

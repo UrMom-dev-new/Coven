@@ -1,0 +1,19 @@
+{
+  "hermes": {
+    "repo": "https://github.com/NousResearch/hermes-agent",
+    "tag": "v2026.9.21",
+    "version": "0.21.4",
+    "releaseCommit": "d337b73",
+    "installScript": "https://raw.githubusercontent.com/NousResearch/hermes-agent/v2026.9.21/scripts/install.ps1",
+    "notes": [
+      "Use an app-owned HERMES_HOME under Coven user data.",
+      "Do not depend on the user's PATH, UWORL, or an unrelated Hermes installation.",
+      "Native runtime install and live Runs API verification must be performed on Windows before release readiness is claimed."
+    ]
+  },
+  "webView2": {
+    "distribution": "Evergreen",
+    "bootstrapper": "https://go.microsoft.com/fwlink/p/?LinkId=2124703",
+    "detection": "Check pv under Microsoft EdgeUpdate WebView2 runtime client registry keys before starting pywebview."
+  }
+}

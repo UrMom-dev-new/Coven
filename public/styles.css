@@ -389,6 +389,83 @@ dd {
   margin-bottom: 4px;
 }
 
+.setup-wizard {
+  grid-column: 1 / -1;
+  border: 1px solid var(--brass-line);
+  border-radius: var(--radius);
+  background: rgba(13, 18, 25, 0.96);
+  padding: 12px;
+}
+
+.setup-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.setup-step,
+.setup-card {
+  border: 1px solid #343e4e;
+  border-radius: 6px;
+  background: #0b1118;
+  padding: 10px;
+}
+
+.setup-step {
+  display: grid;
+  gap: 4px;
+  min-height: 90px;
+}
+
+.setup-step b,
+.setup-card h3 {
+  margin: 0;
+  color: var(--text);
+}
+
+.setup-step span,
+.fine-print {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.setup-step em {
+  align-self: end;
+  color: var(--candle);
+  font-style: normal;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+}
+
+.setup-ready {
+  border-color: rgba(120, 194, 129, 0.56);
+}
+
+.setup-needs_attention,
+.setup-needs_input {
+  border-color: rgba(218, 170, 86, 0.72);
+}
+
+.setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.setup-card {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.setup-card input {
+  width: 100%;
+}
+
 .workspace.compact {
   grid-template-columns: minmax(440px, 1fr) minmax(440px, 1fr);
 }
