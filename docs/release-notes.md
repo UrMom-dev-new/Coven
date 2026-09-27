@@ -1,5 +1,13 @@
 # Release Notes
 
+## 0.4.0-beta
+
+- Prevents background helper console windows and fixes packaged voice-worker startup.
+- Adds guided external Hermes setup, a whisper.cpp/model installer, microphone testing, and Sanctuary text wrapping.
+- Adds saved Office app links and an isolated persistent GovDash browser profile, with unlink/forget controls.
+- Publishes verified main builds at the stable `windows-main` beta download links, including installer, portable ZIP, checksums, and source-commit metadata.
+- Keeps Office/GovDash agent automation distinct from interactive sign-in. Real tenant accounts and target-laptop acceptance remain to be verified.
+
 ## 0.3.0-beta
 
 - Adds the first-run Guided setup panel for Windows beta users.

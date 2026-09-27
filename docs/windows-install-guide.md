@@ -1,13 +1,17 @@
 # Windows Install Guide
 
-This private beta is distributed as one installer:
+The [current Windows beta](https://github.com/UrMom-dev-new/Coven/releases/tag/windows-main) is distributed as one installer:
 
 ```text
 Coven-Setup-x64.exe
 Coven-Setup-x64.exe.sha256
 ```
 
-The repository is private. Testers need access to `UrMom-dev-new/HermesAvatar` to download draft/prerelease assets or workflow artifacts. Do not publish a public GitHub Release or move binaries to a public repository without a separate approval.
+Download [Coven-Setup-x64.exe](https://github.com/UrMom-dev-new/Coven/releases/download/windows-main/Coven-Setup-x64.exe) from this public repository. No GitHub login or command line is required for the released installer. Workflow artifacts are for development; use the release download for normal installation.
+
+The `windows-main` prerelease contains the latest successfully tested main build. Its notes and `Coven-build-info.json` give the exact source commit, workflow run, and SHA-256 checksums. Older versioned releases remain historical snapshots. The installed application folder contains the matching `build-info.json`.
+
+For portable use, download `Coven-Portable-x64.zip`, extract the entire ZIP, and double-click `Coven/Coven.exe`. Keep its accompanying files; copying only the executable will not work.
 
 ## Install
 
@@ -44,7 +48,7 @@ Open `Settings -> Guided setup`.
 In `Settings -> Guided setup`:
 
 - `Repair components` marks app-owned components for verification without deleting work.
-- `Check updates` opens the private repository release page.
+- `Check updates` opens the current Windows beta release page.
 - `Export diagnostics` writes a redacted local support bundle with readiness and version data only. It excludes secrets, conversations, raw audio, and business documents.
 
 ## Uninstall

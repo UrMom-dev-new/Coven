@@ -75,6 +75,10 @@ dist\installer\Coven-Setup-x64.exe.sha256
 
 The GitHub Actions Windows workflow installs Inno Setup, compiles this installer, writes the SHA-256 checksum, installs the installer into a disposable per-user directory with a path containing spaces/non-ASCII text, runs the installed executable self-test, uninstalls it, and uploads `Coven-Windows-Installer` after those gates pass. That is still unattended installer smoke, not a full clean-machine interactive acceptance gate.
 
-Manual draft releases use `.github/workflows/windows-release-draft.yml` with an explicitly selected ref. The release stays draft/prerelease and private unless separately approved.
+After both Windows jobs pass on a main push, `publish-main` downloads those exact tested artifacts. It verifies their build identity/checksums, adds a portable ZIP and a release manifest, publishes the `windows-main` rolling prerelease, and downloads the assets again to verify their bytes. It never rebuilds during promotion. Branch and pull-request runs cannot publish; superseded main runs skip publishing. Publication is serialized. This is a public beta channel, with source commit and workflow links in its release notes.
+
+`build-info.json` is created alongside `Coven.exe` before installer compilation, so both distributions identify the same Git commit and executable hash. `Coven-build-info.json` on the release additionally records the installer and portable ZIP hashes.
+
+Manual versioned draft releases use `.github/workflows/windows-release-draft.yml` with an explicitly selected ref. Those archival releases do not replace the current `windows-main` download.
 
 Unsigned beta builds must be labeled unsigned. Do not ask users to disable Windows security.

@@ -1,6 +1,6 @@
 # Coven Agent Workspace
 
-Repository: `HermesAvatar`
+Repository: `UrMom-dev-new/Coven`
 
 Coven is a local gothic adventure-game shell for a Hermes Agent workspace. It starts in an approved-reference sanctuary with six configurable witch profiles, durable text conversations, a quest journal, explicit task assignment, local/API routing status, desktop/browser launch paths, and a presentation-only Ophelia river failure scene.
 
@@ -8,11 +8,14 @@ This implementation is intentionally dependency-light: Python 3.11+ standard lib
 
 ## Windows Download
 
-Private beta testers can download the current prerelease from [Coven 0.3.0-beta Windows beta](https://github.com/UrMom-dev-new/HermesAvatar/releases/tag/coven-v0.3.0-beta):
+Download the [current Windows beta](https://github.com/UrMom-dev-new/Coven/releases/tag/windows-main), built from the latest successfully verified `main` commit:
 
-- [Download `Coven-Setup-x64.exe`](https://github.com/UrMom-dev-new/HermesAvatar/releases/download/coven-v0.3.0-beta/Coven-Setup-x64.exe)
-- [Download `Coven-Setup-x64.exe.sha256`](https://github.com/UrMom-dev-new/HermesAvatar/releases/download/coven-v0.3.0-beta/Coven-Setup-x64.exe.sha256)
+- [Download `Coven-Setup-x64.exe`](https://github.com/UrMom-dev-new/Coven/releases/download/windows-main/Coven-Setup-x64.exe)
+- [Installer checksum](https://github.com/UrMom-dev-new/Coven/releases/download/windows-main/Coven-Setup-x64.exe.sha256)
+- [Portable ZIP](https://github.com/UrMom-dev-new/Coven/releases/download/windows-main/Coven-Portable-x64.zip) — extract all files, then open `Coven/Coven.exe`.
+- [Build information and checksums](https://github.com/UrMom-dev-new/Coven/releases/download/windows-main/Coven-build-info.json)
 
+The release notes and build information record the exact source commit and Windows verification run. Both the installed app folder and portable ZIP include `build-info.json`. The rolling download updates only after the Windows build and UI checks pass; older versioned releases are historical snapshots.
 
 Click-only path:
 
@@ -24,7 +27,7 @@ Click-only path:
 
 The installer is an unsigned beta unless the release notes explicitly say an Authenticode signing certificate was configured for that build. Do not disable Windows security as a normal installation step.
 
-See `docs/windows-install-guide.md` for checksum verification, private-release download rules, setup screens, repair, update, and uninstall notes.
+See `docs/windows-install-guide.md` for setup screens, repair, update, and uninstall notes.
 
 ## Developer Run
 

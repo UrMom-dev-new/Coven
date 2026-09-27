@@ -121,7 +121,7 @@ class SetupManager:
             "release": {
                 "installer": WINDOWS_SETUP_ASSET,
                 "checksum": WINDOWS_CHECKSUM_ASSET,
-                "downloadPage": "https://github.com/UrMom-dev-new/Coven/releases",
+                "downloadPage": "https://github.com/UrMom-dev-new/Coven/releases/tag/windows-main",
                 "visibility": "public repository",
             },
             "privacy": "Credentials are stored outside renderer storage. Local voice audio is transcribed locally; transcripts sent to Hermes may reach the configured provider.",

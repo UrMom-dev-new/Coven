@@ -79,3 +79,33 @@ jobs:
           path: |
             dist/installer/Coven-Setup-x64.exe
             dist/installer/Coven-Setup-x64.exe.sha256
+
+  publish-main:
+    # Publish the very same artifacts that passed both Windows jobs.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [settings-ui, windows-portable]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    concurrency:
+      group: coven-windows-main-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: Coven-Windows-Portable
+          path: release-input/portable/Coven
+      - uses: actions/download-artifact@v4
+        with:
+          name: Coven-Windows-Installer
+          path: release-input/installer
+      - name: Publish and verify current main Windows downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/publish-windows-main.py
