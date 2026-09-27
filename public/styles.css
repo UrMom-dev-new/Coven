@@ -67,7 +67,9 @@ button {
   border-radius: 6px;
   background: #2a2025;
   color: var(--text);
-  padding: 0 14px;
+  padding: 8px 14px;
+  white-space: normal;
+  overflow-wrap: anywhere;
   cursor: pointer;
 }
 
@@ -309,10 +311,12 @@ dd {
 
 .voice-panel {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) minmax(150px, 1.3fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
 }
+
+.voice-panel label { grid-column: 1 / -1; }
 
 .voice-panel .inline-state {
   justify-self: end;
@@ -509,6 +513,7 @@ dd {
 .subheading-row,
 .action-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
@@ -704,7 +709,7 @@ dd {
 
 .task-row {
   display: grid;
-  grid-template-columns: 56px 1fr auto;
+  grid-template-columns: 56px minmax(0, 1fr);
   gap: 10px;
   align-items: center;
   padding: 8px;
@@ -746,6 +751,8 @@ dd {
 }
 
 .task-row .task-mode-badge {
+  grid-column: 2;
+  justify-self: start;
   color: #1a1209;
   font-size: 0.74rem;
 }
@@ -776,7 +783,7 @@ dd {
 
 .character-frame {
   display: grid;
-  grid-template-columns: minmax(96px, 0.42fr) 1fr;
+  grid-template-columns: minmax(86px, 0.42fr) minmax(0, 1fr);
   gap: 12px;
   align-items: start;
   border-bottom: 1px solid var(--line);
@@ -820,6 +827,7 @@ dd {
 }
 
 .message p {
+  white-space: pre-wrap;
   margin: 5px 0;
   color: #efe9dc;
 }
@@ -1171,6 +1179,29 @@ time {
   }
 }
 
+/* Text may include long model IDs, paths, URLs, and unbroken task output. */
+.workspace, .settings-panel, .topbar { overflow-wrap: anywhere; }
+:where(.workspace, .settings-panel) :where(div, section, article, form, fieldset, details, ol, li, dl, dd, input, select, textarea) {
+  min-width: 0;
+}
+.workspace[hidden], .settings-panel[hidden] { display: none; }
+.workspace input, .workspace select, .workspace textarea { width: 100%; max-width: 100%; }
+.action-row > button { flex: 1 1 105px; max-width: 100%; }
+.inline-state { max-width: 100%; }
+.task-detail pre, .message pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.path-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.setup-card fieldset { display: grid; gap: 10px; border: 0; padding: 0; margin: 0; }
+.setup-card details > :not(summary) { margin-top: 10px; }
+.setup-card summary { cursor: pointer; padding: 8px 0; }
+.setup-card p { margin: 4px 0; line-height: 1.5; }
+.setup-card .checkbox-label { display: flex; align-items: center; gap: 10px; }
+.setup-card input[type="checkbox"] { width: 18px; height: 18px; }
+.setup-card progress { width: 100%; accent-color: var(--candle); }
+.setup-feedback { display: block; color: var(--candle); white-space: pre-wrap; }
+.setup-feedback[data-tone="error"] { color: #ffb3ac; }
+button:disabled, fieldset:disabled { opacity: 0.65; cursor: default; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
 @media (max-width: 1180px) {
   .topbar,
   .settings-panel {
@@ -1218,6 +1249,8 @@ time {
 }
 
 @media (max-width: 720px) {
+  .setup-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .action-row > button { flex-basis: auto; }
   .topbar-actions,
   .workspace-state {
     align-items: stretch;

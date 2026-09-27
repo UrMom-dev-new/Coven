@@ -37,7 +37,7 @@ class DesktopBridge:
         self._used = True
         return self._token
 
-    def choose_folder(self) -> str:
+    def choose_folder(self, title: str = "Choose a Coven work folder") -> str:
         try:
             import tkinter as tk
             from tkinter import filedialog
@@ -45,11 +45,26 @@ class DesktopBridge:
             root = tk.Tk()
             root.withdraw()
             root.attributes("-topmost", True)
-            selected = filedialog.askdirectory(title="Choose a Coven work folder")
+            selected = filedialog.askdirectory(title=title)
             root.destroy()
             return selected or ""
         except Exception:
             return ""
+
+    def choose_executable(self, title: str = "Choose a runtime executable") -> str:
+        root = None
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            return filedialog.askopenfilename(title=title, filetypes=[("Programs", "*.exe"), ("All files", "*")]) or ""
+        except Exception:
+            return ""
+        finally:
+            if root is not None:
+                root.destroy()
 
 
 class DesktopSelfTestError(RuntimeError):

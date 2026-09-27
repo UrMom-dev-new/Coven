@@ -93,8 +93,30 @@
             <button id="exploreDemoButton" type="button" class="secondary-button">Explore demo</button>
             <button id="liveSetupButton" type="button" class="secondary-button">Use live Hermes</button>
           </div>
+          <form id="hermesSetupForm" class="setup-card">
+            <h3>Connect your Hermes runtime</h3>
+            <p>Use a Hermes installation anywhere on this computer. Coven keeps its own settings and task history.</p>
+            <label for="hermesExecutable">Hermes executable or installation folder</label>
+            <div class="path-picker"><input id="hermesExecutable" type="text" spellcheck="false" placeholder="Select hermes.exe or its installation folder" /><button id="browseHermes" type="button" class="secondary-button">Browse…</button></div>
+            <label for="hermesHome">Hermes data folder (needed to start Hermes here)</label>
+            <div class="path-picker"><input id="hermesHome" type="text" spellcheck="false" placeholder="Folder containing this runtime’s config.yaml and .env" /><button id="browseHermesHome" type="button" class="secondary-button">Browse…</button></div>
+            <p class="fine-print">Choose the data folder for this project. Its provider credentials and tools stay under Hermes’ control. A runtime already running only needs its address and key below.</p>
+            <label for="hermesAddress">Local server address</label>
+            <input id="hermesAddress" type="url" required spellcheck="false" placeholder="http://127.0.0.1:8642" />
+            <label for="hermesApiKey">Hermes server key (not your OpenAI key)</label>
+            <input id="hermesApiKey" type="password" autocomplete="new-password" placeholder="Paste the key for a running Hermes server" />
+            <p id="hermesKeyState" class="fine-print"></p>
+            <div class="action-row">
+              <button type="submit">Save &amp; test connection</button>
+              <button id="testHermes" type="button" class="secondary-button">Test saved connection</button>
+              <button id="startHermes" type="button" class="secondary-button">Start selected Hermes</button>
+              <button id="stopHermes" type="button" class="secondary-button" hidden>Stop Hermes started here</button>
+            </div>
+            <p id="hermesFeedback" class="setup-feedback" role="status" aria-live="polite">Save your selection, then test the connection. Starting Hermes here creates a protected server key if needed.</p>
+          </form>
           <form id="providerSetupForm" class="setup-card">
-            <h3>Connect your AI provider</h3>
+            <h3>Optional provider credential storage</h3>
+            <p class="fine-print">An external Hermes runtime uses its own provider configuration. Saving a credential here does not change that runtime; configure its provider in Hermes and use Test saved connection above.</p>
             <label for="providerModel">Model</label>
             <input id="providerModel" type="text" autocomplete="off" placeholder="gpt-5.6-terra or provider model id" />
             <label for="providerApiKey">API key</label>
@@ -113,8 +135,38 @@
               <button type="submit">Save folder</button>
             </div>
           </form>
+          <form id="voiceSetupForm" class="setup-card">
+            <h3>Set up local voice</h3>
+            <p>Install whisper.cpp and an English speech model in one step. After the download, speech recognition works offline on your CPU.</p>
+            <fieldset id="voiceSetupFields">
+              <legend class="sr-only">Voice components</legend>
+              <label class="checkbox-label"><input id="voiceEnabled" type="checkbox" /> Enable local voice</label>
+              <label for="voiceProfile">Speech model</label>
+              <select id="voiceProfile"><option value="base.en-q5_1">Standard — more accurate, 57 MB</option><option value="tiny.en-q5_1">Lightweight — faster, 31 MB</option></select>
+              <button id="installVoice" type="button">Install local voice</button>
+              <p class="fine-print">Windows x64 • Internet needed for setup • Allow 400 MB free space. Downloads come from whisper.cpp and Hugging Face and are checked against pinned hashes. Reinstall to repair.</p>
+              <details>
+                <summary>Use an existing whisper.cpp installation</summary>
+                <label for="whisperExecutable">whisper-server executable</label>
+                <div class="path-picker"><input id="whisperExecutable" type="text" spellcheck="false" placeholder="Select whisper-server.exe" /><button id="browseWhisper" type="button" class="secondary-button">Browse…</button></div>
+                <label for="whisperModelDir">Folder containing the selected model</label>
+                <div class="path-picker"><input id="whisperModelDir" type="text" spellcheck="false" placeholder="Folder containing ggml-base.en-q5_1.bin or ggml-tiny.en-q5_1.bin" /><button id="browseVoiceModel" type="button" class="secondary-button">Browse…</button></div>
+              </details>
+              <label for="voiceMicrophone">Microphone</label>
+              <select id="voiceMicrophone"><option value="default">Default system microphone</option></select>
+              <div class="action-row"><button id="findMicrophones" type="button" class="secondary-button">Find microphones</button><button type="submit">Save voice settings</button></div>
+            </fieldset>
+            <progress id="voiceInstallProgress" aria-label="Voice download progress" hidden></progress>
+            <p id="voiceInstallStatus" class="fine-print" role="status"></p>
+            <button id="cancelVoiceInstall" type="button" class="secondary-button" hidden>Cancel download</button>
+            <p id="voiceSetupReadiness" class="fine-print"></p>
+            <p id="voiceSetupFeedback" class="setup-feedback" role="status" aria-live="polite"></p>
+            <div class="action-row"><button id="testMicrophone" type="button" class="secondary-button" disabled>Test microphone</button><button id="cancelMicrophoneTest" type="button" class="secondary-button" hidden>Cancel test</button></div>
+            <p class="fine-print">Save settings before testing. Say a short sentence, then choose Finish test. This test only displays a transcript; it never assigns a task or sends a message.</p>
+            <output id="microphoneTestResult" class="setup-feedback" aria-live="polite"></output>
+          </form>
           <div class="setup-card">
-            <h3>Voice and maintenance</h3>
+            <h3>Maintenance</h3>
             <p id="setupPrivacy" class="fine-print"></p>
             <div class="action-row">
               <button id="repairComponentsButton" type="button" class="secondary-button">Repair components</button>

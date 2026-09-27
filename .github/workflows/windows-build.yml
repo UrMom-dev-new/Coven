@@ -12,6 +12,26 @@ permissions:
   contents: read
 
 jobs:
+  settings-ui:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install browser test driver
+        run: npm install --no-save --package-lock=false playwright@1.62.1
+      - name: Check Settings and Sanctuary in Edge
+        run: node scripts/check-settings-ui.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Coven-UI-Checks
+          path: dist/ui-checks
   windows-portable:
     runs-on: windows-latest
     timeout-minutes: 30
@@ -22,6 +42,9 @@ jobs:
           python-version: "3.12"
       - name: Run tests
         run: python -m unittest discover -s tests
+      - name: Verify local voice installation and real CPU transcription
+        timeout-minutes: 8
+        run: python scripts/smoke-voice-windows.py
       - name: Build portable bundle
         shell: pwsh
         timeout-minutes: 20

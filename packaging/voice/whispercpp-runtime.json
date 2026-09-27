@@ -1,14 +1,16 @@
 {
   "runtime": {
     "engine": "whisper.cpp",
-    "pinnedRelease": "manual-import",
+    "pinnedRelease": "v1.8.3",
     "expectedExecutable": "whisper-server.exe",
     "notes": [
-      "Package a CPU-only Windows x64 whisper.cpp server build after verifying CPU compatibility on the target machine.",
-      "Do not execute user-supplied runtime archives. Install only a reviewed runtime artifact into the app-owned voice/runtime directory.",
-      "The app starts the server only as an app-owned loopback child process with a random request-path prefix.",
-      "The app remains usable without this runtime; local voice status reports setup_required."
-    ]
+      "Settings installs the pinned Windows x64 CPU runtime after an explicit user action.",
+      "Downloads are hash-verified and staged before activation; DLLs remain alongside whisper-server.exe.",
+      "Coven starts the server as an app-owned loopback child with a random request-path prefix.",
+      "Voice is optional. Use the microphone test after installation to verify local transcription on this computer."
+    ],
+    "sha256": "d824b1e37599f882b396e73f1ee0bfd5d0529f700314c48311dcbd00b803321d",
+    "source": "https://github.com/ggml-org/whisper.cpp/releases/download/v1.8.3/whisper-bin-x64.zip"
   },
   "models": [
     {
