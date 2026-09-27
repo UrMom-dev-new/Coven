@@ -26,7 +26,13 @@ export function createLinkedApps() {
     govdashDirty = false;
   }
   function render() {
-    if (!settings) return;
+    // Keep initial loading and save responses from replacing edits made in flight.
+    $("officeLinksForm").querySelectorAll("input, button").forEach((el) => { el.disabled = !settings || officeBusy; });
+    if (!settings) {
+      $("govdashLinkFields").disabled = true;
+      $("govdashLinksForm").querySelectorAll(".action-row button").forEach((el) => { el.disabled = true; });
+      return;
+    }
     for (const app of settings.office.apps) {
       $("office" + ids[app.id] + "Status").textContent = app.linked ? "Linked" : app.available ? "Found — save to link" : "Not found";
       $("openOffice" + ids[app.id]).disabled = officeBusy || !app.linked;
@@ -39,6 +45,7 @@ export function createLinkedApps() {
     $("closeGovdash").disabled = govdashBusy || !["open", "opening"].includes(g.session.state);
     $("forgetGovdash").disabled = govdashBusy || active || !g.session.savedProfile;
     $("unlinkGovdash").disabled = govdashBusy || active || !g.enabled;
+    $("openGovdashDownloads").disabled = govdashBusy;
     $("govdashSessionState").textContent = g.session.message;
     if (settings.error) feedback("officeLinkFeedback", settings.error, true);
   }
@@ -75,6 +82,7 @@ export function createLinkedApps() {
   return {
     refresh,
     bind() {
+      render();
       $("officeLinksForm").addEventListener("input", () => { officeDirty = true; });
       $("govdashLinksForm").addEventListener("input", () => { govdashDirty = true; });
       for (const [app, id] of Object.entries(ids)) {

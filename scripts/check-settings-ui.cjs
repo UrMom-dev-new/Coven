@@ -104,7 +104,8 @@ async function main() {
     await page.reload();
     await page.locator('[data-view="settings"]').click();
     await page.waitForFunction(() => document.querySelector("#officeWordStatus").textContent === "Linked");
-    assert.equal(await page.locator("#officeWordPath").inputValue(), officeFixture);
+    // Python resolves Windows short names (RUNNER~1) to their full paths.
+    assert.equal(fs.realpathSync.native(await page.locator("#officeWordPath").inputValue()), fs.realpathSync.native(officeFixture));
     assert.equal(await page.locator("#openGovdash").isEnabled(), true);
     assert.equal(await page.locator("#forgetGovdash").isEnabled(), false);
     await page.locator("#officeLinksForm").scrollIntoViewIfNeeded();
@@ -117,7 +118,7 @@ async function main() {
     assert.equal(await page.locator("#officeWordPath").inputValue(), "unsaved Office path");
     await page.locator("#unlinkOfficeApps").click();
     await page.waitForFunction(() => document.querySelector("#officeLinkFeedback").textContent.startsWith("Office unlinked"));
-    assert.equal(await page.locator("#officeWordPath").inputValue(), officeFixture);
+    assert.equal(fs.realpathSync.native(await page.locator("#officeWordPath").inputValue()), fs.realpathSync.native(officeFixture));
     await page.locator("#unlinkGovdash").click();
     await page.waitForFunction(() => document.querySelector("#govdashLinkFeedback").textContent.startsWith("GovDash unlinked"));
     assert.equal(await page.locator("#openGovdash").isEnabled(), false);
