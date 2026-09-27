@@ -13,6 +13,7 @@ import json
 
 from .adapters import hardware_report
 from .configuration import AppConfig
+from .processes import background_process_options
 
 
 class RuntimeInspector:
@@ -116,10 +117,12 @@ class RuntimeInspector:
         try:
             completed = subprocess.run(
                 command,
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
                 check=False,
+                **background_process_options(),
             )
         except FileNotFoundError:
             return {"ok": False, "commandFound": False, "error": "not found"}

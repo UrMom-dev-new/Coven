@@ -28,6 +28,7 @@ import urllib.request
 import uuid
 
 from .configuration import AppConfig, validate_profiles_file
+from .processes import background_process_options
 
 
 class VoiceError(RuntimeError):
@@ -693,7 +694,13 @@ def _ensure_whisper_server(server: dict[str, Any] | None, job: dict[str, Any]) -
         "--inference-path",
         "/inference",
     ]
-    process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        **background_process_options(),
+    )
     state = {"key": key, "process": process, "baseUrl": f"http://127.0.0.1:{port}{request_path}"}
     deadline = time.time() + 30.0
     health_url = f"{state['baseUrl']}/health"
