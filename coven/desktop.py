@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+# A frozen multiprocessing child re-enters this executable. Dispatch it before
+# importing the app or parsing desktop arguments, rather than starting another UI.
+if __name__ == "__main__":
+    import multiprocessing
+
+    multiprocessing.freeze_support()
+
 import argparse
 import json
 import os
@@ -133,6 +140,33 @@ def _json_body(body: bytes, context: str) -> dict[str, object]:
     return payload
 
 
+def _check_voice_worker_startup(timeout: float) -> None:
+    """Exercise the real child/queue path without a microphone or speech model."""
+    from coven.voice import WhisperCppWorker
+
+    worker = WhisperCppWorker()
+    try:
+        # An intentionally incomplete job must come back through the worker's
+        # error boundary. It cannot start an external runtime or transcribe audio.
+        worker.submit({"sessionId": "desktop-worker-self-test", "generation": 0})
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            for result in worker.poll():
+                if (
+                    result.get("sessionId") == "desktop-worker-self-test"
+                    and result.get("ok") is False
+                    and result.get("code") == "voice_worker_failed"
+                ):
+                    return
+                raise DesktopSelfTestError("Voice worker returned an unexpected startup response.")
+            if not worker.snapshot()["running"]:
+                raise DesktopSelfTestError("Voice worker exited before answering the startup check.")
+            time.sleep(0.05)
+        raise DesktopSelfTestError("Voice worker did not answer the startup check.")
+    finally:
+        worker.close()
+
+
 def run_self_test(args: argparse.Namespace) -> int:
     log_path = args.self_test_log
     _append_self_test_log(log_path, "starting desktop self-test")
@@ -151,6 +185,9 @@ def run_self_test(args: argparse.Namespace) -> int:
 
     server = None
     try:
+        _append_self_test_log(log_path, "checking background voice worker startup")
+        _check_voice_worker_startup(args.self_test_timeout)
+        _append_self_test_log(log_path, "background voice worker startup passed")
         _append_self_test_log(log_path, "starting loopback service")
         server, _thread = start_owned_server(port, data_dir, args.config, token)
         _append_self_test_log(log_path, "waiting for loopback service readiness")
