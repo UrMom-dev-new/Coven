@@ -2,6 +2,7 @@ import { api, postBinary, postJson } from "./api.js";
 import { $, clear, field, node, restoreFocus } from "./dom.js";
 import { createSanctuaryGame } from "./game.js";
 import { sceneDurationForMotion } from "./presentation.js";
+import { createRuntimeSettings } from "./runtime-settings.js";
 
 const state = {
   profiles: [],
@@ -47,6 +48,12 @@ const positions = {
   selene: { left: "14%", top: "59%" },
   ophelia: { left: "82%", top: "54%" },
 };
+
+const runtimeSettings = createRuntimeSettings({
+  testMicrophone: () => state.recording?.testOnly ? finishVoiceCapture() : startVoiceCapture({ testOnly: true }),
+  cancelMicrophone: () => cancelVoiceInput("Microphone test cancelled."),
+  voiceChanged: refreshVoiceStatus,
+});
 
 function profile(id = state.selectedWitch) {
   return state.profiles.find((item) => item.id === id) || state.profiles[0];
@@ -164,6 +171,7 @@ async function refreshStatus(force = false) {
 async function refreshSetupStatus() {
   const payload = await api("/api/setup/status");
   state.setupStatus = payload.setup;
+  await runtimeSettings.refresh();
   renderSetupWizard();
   renderOnboarding();
 }
@@ -276,7 +284,7 @@ async function exportSupportBundle() {
 }
 
 function checkForUpdates() {
-  const page = state.setupStatus?.release?.downloadPage || "https://github.com/UrMom-dev-new/HermesAvatar/releases";
+  const page = state.setupStatus?.release?.downloadPage || "https://github.com/UrMom-dev-new/Coven/releases";
   window.open(page, "_blank", "noopener");
 }
 
@@ -793,7 +801,7 @@ function replaceTask(task) {
   state.selectedTask = task.id;
 }
 
-async function startVoiceCapture() {
+async function startVoiceCapture({ testOnly = false } = {}) {
   if (state.recording) return;
   if (state.voiceStatus?.state !== "ready") {
     setNotice(voiceSummary(), "warn");
@@ -802,11 +810,12 @@ async function startVoiceCapture() {
   stopSpeech();
   const started = await postJson("/api/voice/start", {
     witchId: state.selectedWitch,
-    inputMode: $("voiceMode").value,
+    inputMode: testOnly ? "dictation" : $("voiceMode").value,
     view: state.activeView,
   });
   const session = started.session;
   const recording = {
+    testOnly,
     sessionId: session.id,
     generation: session.generation,
     witchId: session.witchId,
@@ -825,15 +834,22 @@ async function startVoiceCapture() {
     pollTimer: null,
   };
   state.recording = recording;
+  if (testOnly) runtimeSettings.showTest("Listening locally. Say a sentence, then choose Finish test.");
   updateVoiceAvailability();
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }, video: false });
+    const microphone = state.voiceStatus?.microphoneId || "default";
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: {
+      channelCount: 1, echoCancellation: true, noiseSuppression: true,
+      ...(microphone !== "default" ? { deviceId: { exact: microphone } } : {}),
+    }, video: false });
     if (state.recording !== recording || recording.cancelled) {
       stream.getTracks().forEach((track) => track.stop());
       return;
     }
     const AudioContext = window.AudioContext || window.webkitAudioContext;
+    recording.stream = stream;
     const audioContext = new AudioContext();
+    recording.audioContext = audioContext;
     const source = audioContext.createMediaStreamSource(stream);
     const processor = audioContext.createScriptProcessor(4096, 1, 1);
     processor.onaudioprocess = (event) => {
@@ -860,6 +876,7 @@ async function startVoiceCapture() {
     setNotice("Recording locally. Release or press Finish when ready.", "info");
   } catch (error) {
     await cancelVoiceInput("Microphone capture failed or was denied.");
+    if (testOnly) runtimeSettings.showTest(`Microphone capture failed: ${error.message}. Check Windows microphone permissions or choose another device.`, true);
     setNotice(`Microphone capture failed: ${error.message || error}.`, "error");
   } finally {
     updateVoiceAvailability();
@@ -871,6 +888,7 @@ async function finishVoiceCapture() {
   if (!recording || recording.busy) return;
   recording.busy = true;
   recording.label = "Transcribing locally...";
+  if (recording.testOnly) runtimeSettings.showTest("Transcribing on this computer…");
   updateVoiceAvailability();
   cleanupVoiceCapture(recording, { keepChunks: true });
   const durationMs = Date.now() - recording.startedAt;
@@ -889,6 +907,7 @@ async function finishVoiceCapture() {
     pollVoiceResult(recording);
   } catch (error) {
     if (state.recording === recording) state.recording = null;
+    if (recording.testOnly) runtimeSettings.showTest(error.message, true);
     setNotice(error.message, "error");
     updateVoiceAvailability();
   }
@@ -898,6 +917,7 @@ async function cancelVoiceInput(reason = "Voice input cancelled.") {
   const recording = state.recording;
   if (!recording) return;
   recording.cancelled = true;
+  if (recording.testOnly) runtimeSettings.showTest(reason);
   cleanupVoiceCapture(recording);
   state.recording = null;
   updateVoiceAvailability();
@@ -937,12 +957,14 @@ async function pollVoiceResult(recording) {
     updateVoiceAvailability();
     if (session.state === "transcript_ready") {
       state.recording = null;
-      applyVoiceResult(session);
+      if (recording.testOnly) runtimeSettings.showTest(`Microphone test passed. Heard: ${session.result?.transcript || ""}`);
+      else applyVoiceResult(session);
       updateVoiceAvailability();
       return;
     }
     if (session.state === "cancelled" || session.state === "error") {
       state.recording = null;
+      if (recording.testOnly) runtimeSettings.showTest(session.error?.message || "No speech recognized. Try again.", true);
       setNotice(session.error?.message || "Voice input did not produce a transcript.", "warn");
       updateVoiceAvailability();
       return;
@@ -951,6 +973,7 @@ async function pollVoiceResult(recording) {
   } catch (error) {
     if (state.recording === recording) {
       state.recording = null;
+      if (recording.testOnly) runtimeSettings.showTest(error.message, true);
       setNotice(error.message, "error");
       updateVoiceAvailability();
     }
@@ -1069,13 +1092,14 @@ function renderVoiceCommands() {
 }
 
 function updateVoiceAvailability() {
-  const ready = state.voiceStatus?.state === "ready";
+  const ready = state.voiceStatus?.state === "ready" && !runtimeSettings.installing;
   const captureAvailable = Boolean(navigator.mediaDevices?.getUserMedia && (window.AudioContext || window.webkitAudioContext));
   $("recordButton").disabled = !ready || !captureAvailable || Boolean(state.recording?.busy);
   $("recordButton").textContent = state.recording ? "Finish recording" : (ready && captureAvailable ? "Push to talk" : "Voice unavailable");
   $("cancelVoiceButton").disabled = !state.recording;
   $("voiceState").textContent = state.recording?.label || voiceSummary();
   $("stopSpeakingButton").disabled = !("speechSynthesis" in window);
+  runtimeSettings.updateVoice(state.voiceStatus, state.recording, captureAvailable);
 }
 
 async function toggleRecording() {
@@ -1225,6 +1249,7 @@ function setActiveView(view) {
     button.setAttribute("aria-selected", String(button.dataset.view === view));
   });
   $("settingsPanel").hidden = view !== "settings";
+  $("workspace").hidden = view === "settings";
   if (view === "journal") {
     $("journalTitle").scrollIntoView({ block: "start", behavior: "smooth" });
   } else if (view === "sanctuary") {
@@ -1235,6 +1260,7 @@ function setActiveView(view) {
 }
 
 function bindEvents() {
+  runtimeSettings.bind();
   $("messageForm").addEventListener("submit", sendMessage);
   $("messageInput").addEventListener("input", () => rememberMessageDraft(state.selectedWitch));
   $("taskForm").addEventListener("submit", assignTask);

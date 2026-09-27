@@ -322,7 +322,26 @@ class VoiceService:
         self._lock = threading.RLock()
         self._session: VoiceSession | None = None
         self._generation = 0
+        self._model_hash_cache = None
         self._cleanup_startup_tmp()
+
+    def require_idle(self) -> None:
+        with self._lock:
+            self._drain_worker()
+            if (self._session and self._session.state not in TERMINAL_VOICE_STATES) or self.worker.snapshot().get("pending"):
+                raise VoiceError("Finish or cancel voice input before changing voice setup.", code="voice_busy")
+
+    def reconfigure(self, config: AppConfig) -> None:
+        with self._lock:
+            self.require_idle()
+            self.close()
+            self.config = config.voice
+            self.model_dir = self.config.model_dir or (self.root / "models")
+            self.runtime_dir = self.config.runtime_dir or (self.root / "runtime")
+            self.worker = WhisperCppWorker()
+            self._session = None
+            self._generation += 1
+            self._model_hash_cache = None
 
     def close(self) -> None:
         self.worker.close()
@@ -348,6 +367,7 @@ class VoiceService:
         notes.append("A transcript explicitly sent to Hermes may leave the device through the configured Hermes/provider route.")
         return {
             "enabled": self.config.enabled,
+            "microphoneId": self.config.microphone_id,
             "state": state,
             "recording": state if not session else session["state"],
             "transcription": "whisper.cpp server" if ready else state,
@@ -532,6 +552,8 @@ class VoiceService:
         which = shutil.which("whisper-server.exe" if os.name == "nt" else "whisper-server")
         if which:
             candidates.append(Path(which))
+        if self.config.runtime_executable:
+            candidates = [Path(self.config.runtime_executable).expanduser()]
         for candidate in candidates:
             if candidate.exists() and candidate.is_file():
                 return {"available": True, "path": str(candidate), "note": "whisper.cpp server runtime was found."}
@@ -564,7 +586,13 @@ class VoiceService:
                 "expectedSha1": None,
                 "note": "This model profile has no verified distributed hash; import is blocked until a trusted hash is configured.",
             }
-        actual = sha1_file(path)
+        file_stat = path.stat()
+        signature = (str(path.resolve()), file_stat.st_size, file_stat.st_mtime_ns, file_stat.st_ctime_ns)
+        if self._model_hash_cache and self._model_hash_cache[0] == signature:
+            actual = self._model_hash_cache[1]
+        else:
+            actual = sha1_file(path)
+            self._model_hash_cache = (signature, actual)
         verified = actual == profile.sha1
         return {
             "available": True,

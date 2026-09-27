@@ -61,11 +61,12 @@ class DemoAdapter:
 class HermesAdapter:
     namespace = "live"
 
-    def __init__(self, store: CovenStore, config: AppConfig):
+    def __init__(self, store: CovenStore, config: AppConfig, *, api_key: str | None = None, connection_id: str = ""):
         self.store = store
         self.config = config
         self.base_url = config.runtime.hermes_api_base_url.rstrip("/")
-        self.api_key = os.environ.get(config.runtime.hermes_api_key_env, "")
+        self.api_key = api_key if api_key is not None else os.environ.get(config.runtime.hermes_api_key_env, "")
+        self.session_provider = f"hermes:{connection_id}" if connection_id else "hermes"
         self.integrations = IntegrationManager(config)
 
     def available(self) -> bool:
@@ -312,14 +313,14 @@ class HermesAdapter:
         return AdapterResult(task=task, details=payload)
 
     def _session_for(self, witch_id: str) -> str:
-        existing = self.store.runtime_session(witch_id, namespace=self.namespace)
+        existing = self.store.runtime_session(witch_id, namespace=self.namespace, provider=self.session_provider)
         if existing:
             return existing
         payload = self._request("POST", "/api/sessions", {"title": f"Coven {witch_id}", "source": "coven"})
         session_id = str(payload.get("id") or payload.get("session_id") or payload.get("sessionId") or "")
         if not session_id:
             raise AdapterError("Hermes did not return a session identifier.", code="hermes_session_missing", details=payload)
-        self.store.set_runtime_session(witch_id, session_id, namespace=self.namespace)
+        self.store.set_runtime_session(witch_id, session_id, namespace=self.namespace, provider=self.session_provider)
         return session_id
 
     def _request(
@@ -539,10 +540,11 @@ class HermesAdapter:
         return roles.get(witch_id, roles["morgana"])
 
     def _session_key(self, witch_id: str) -> str:
-        return f"coven:live:{witch_id}:default"
+        identity = "default" if self.session_provider == "hermes" else self.session_provider
+        return f"coven:live:{witch_id}:{identity}"
 
 
-def build_agent_adapter(config: AppConfig, store: CovenStore):
+def build_agent_adapter(config: AppConfig, store: CovenStore, *, api_key: str | None = None, connection_id: str = ""):
     if config.demo_mode:
         return DemoAdapter(store)
-    return HermesAdapter(store, config)
+    return HermesAdapter(store, config, api_key=api_key, connection_id=connection_id)

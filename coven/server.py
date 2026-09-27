@@ -7,6 +7,7 @@ import json
 import mimetypes
 import os
 import sys
+import threading
 import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -18,13 +19,15 @@ from .adapters import default_data_dir
 from .agent_adapters import AdapterError, build_agent_adapter
 from .auth import AuthManager, has_write_intent, is_allowed_origin
 from .configuration import ConfigError, load_app_config
+from .connection_settings import ConnectionSettings
 from .integrations import IntegrationManager
 from .reconciler import TaskReconciler
 from .runtime import RuntimeInspector
 from .secrets import SecretStoreError
 from .setup import SetupManager
-from .store import CovenStore
+from .store import CovenStore, TERMINAL_TASK_STATUSES
 from .voice import VoiceError, VoiceService
+from .voice_install import VoiceInstaller
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -64,13 +67,48 @@ class CovenHTTPServer(ThreadingHTTPServer):
     reconciler: TaskReconciler | None
 
     def server_close(self) -> None:
+        self.closing = True
+        installer = getattr(self, "voice_installer", None)
+        if installer is not None:
+            installer.close()
         reconciler = getattr(self, "reconciler", None)
         if reconciler is not None:
             reconciler.stop()
         voice = getattr(self, "voice", None)
         if voice is not None:
             voice.close()
+        connections = getattr(self, "connections", None)
+        if connections is not None:
+            connections.close()
         super().server_close()
+
+    def apply_hermes(self) -> None:
+        if self.reconciler is not None:
+            self.reconciler.stop()
+        config = self.connections.effective_config()
+        key = self.connections.api_key()
+        self.runtime = RuntimeInspector(config, api_key=key)
+        self.agent_adapter = build_agent_adapter(config, self.store, api_key=key, connection_id=self.connections.connection_id())
+        self.setup.config = config
+        self.reconciler = None
+        if self.namespace == "live":
+            self.reconciler = TaskReconciler(self.agent_adapter)
+            self.reconciler.start()
+
+    def require_hermes_idle(self) -> None:
+        tasks = self.store.snapshot(namespace="live")["tasks"]
+        if any(task.get("status") not in TERMINAL_TASK_STATUSES for task in tasks):
+            raise ValueError("Finish, cancel, or recover pending live tasks before changing the Hermes connection.")
+
+    def apply_voice(self, payload) -> None:
+        with self.settings_lock:
+            if getattr(self, "closing", False):
+                raise ValueError("Coven is closing. Retry voice setup after opening it again.")
+            self.voice.require_idle()
+            self.connections.save_voice(payload)
+            config = self.connections.effective_config()
+            self.voice.reconfigure(config)
+            self.setup.config = config
 
 
 class CovenHandler(BaseHTTPRequestHandler):
@@ -215,6 +253,9 @@ class CovenHandler(BaseHTTPRequestHandler):
         elif path == "/api/setup/status":
             if self._require_auth():
                 self._send_json({"setup": self.app.setup.status()})
+        elif path == "/api/setup/connections":
+            if self._require_auth():
+                self._send_json({"connections": self.app.connections.status(), "installation": self.app.voice_installer.status()})
         elif path == "/api/voice/status":
             if self._require_auth():
                 self._send_json({"voice": self.app.voice.status()})
@@ -239,6 +280,12 @@ class CovenHandler(BaseHTTPRequestHandler):
         self._serve_static(urlparse(self.path).path, send_body=False)
 
     def do_POST(self) -> None:
+        # Serialize changes with task dispatch and voice session starts so neither
+        # can cross a runtime switch. Downloads themselves run outside this lock.
+        with self.app.settings_lock:
+            self._post()
+
+    def _post(self) -> None:
         if not self._check_origin():
             self._send_error_json(HTTPStatus.FORBIDDEN, "Host or Origin is not allowed.", code="origin_forbidden")
             return
@@ -353,6 +400,33 @@ class CovenHandler(BaseHTTPRequestHandler):
                 self._send_json({"settings": self.app.store.update_preferences(body)})
             elif path == "/api/setup/mode":
                 self._send_json({"setup": self.app.setup.choose_mode(body)})
+            elif path == "/api/setup/hermes":
+                self.app.require_hermes_idle()
+                self.app.connections.save_hermes(body)
+                self.app.apply_hermes()
+                self._send_json({"connections": self.app.connections.status()})
+            elif path == "/api/setup/hermes/test":
+                self._send_json({"test": self.app.connections.test_hermes()})
+            elif path == "/api/setup/hermes/start":
+                self.app.require_hermes_idle()
+                result = self.app.connections.start_hermes()
+                self.app.apply_hermes()
+                self._send_json(result)
+            elif path == "/api/setup/hermes/stop":
+                self.app.require_hermes_idle()
+                self.app.connections.close()
+                self.app.apply_hermes()
+                self._send_json({"message": "The Hermes process started by Coven has stopped. You can change its settings now."})
+            elif path == "/api/setup/voice":
+                if self.app.voice_installer.busy:
+                    raise ValueError("Wait for voice installation to finish, or cancel it first.")
+                self.app.apply_voice(body)
+                self._send_json({"connections": self.app.connections.status(), "voice": self.app.voice.status()})
+            elif path == "/api/setup/voice/install":
+                self.app.voice.require_idle()
+                self._send_json({"installation": self.app.voice_installer.start(body.get("modelProfile", "base.en-q5_1"))})
+            elif path == "/api/setup/voice/cancel":
+                self._send_json({"installation": self.app.voice_installer.cancel()})
             elif path == "/api/setup/provider":
                 self._send_json({"setup": self.app.setup.save_provider(body)})
             elif path == "/api/setup/provider/remove":
@@ -368,6 +442,8 @@ class CovenHandler(BaseHTTPRequestHandler):
             elif path == "/api/setup/support-bundle":
                 self._send_json({"support": self.app.setup.support_bundle()})
             elif path == "/api/voice/start":
+                if self.app.voice_installer.busy:
+                    raise VoiceError("Wait for voice installation to finish before recording.", code="voice_installing")
                 self._send_json(self.app.voice.start_session(body), HTTPStatus.CREATED)
             elif path.startswith("/api/voice/sessions/") and path.endswith("/cancel"):
                 task_id = unquote(path.split("/")[-2])
@@ -397,6 +473,8 @@ class CovenHandler(BaseHTTPRequestHandler):
             self._send_error_json(HTTPStatus.NOT_FOUND, "Requested item was not found.", code="not_found")
         except (ValueError, ConfigError, SecretStoreError, json.JSONDecodeError) as exc:
             self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc), code="bad_request")
+        except OSError:
+            self._send_error_json(HTTPStatus.BAD_REQUEST, "Could not access the selected file, folder, or runtime. Check its location and permissions.", code="local_io_error")
 
     def _serve_static(self, path: str, *, send_body: bool = True) -> None:
         if path in {"/", "/index.html"} and not self._is_authenticated():
@@ -442,13 +520,18 @@ def build_server(
 ) -> CovenHTTPServer:
     config = load_app_config(config_path)
     server = CovenHTTPServer((host, port), CovenHandler)
+    server.settings_lock = threading.RLock()
+    server.connections = ConnectionSettings(config, data_dir)
+    config = server.connections.effective_config()
     server.store = CovenStore(data_dir=data_dir, profile_path=PROFILE_PATH)
     server.auth = AuthManager(bootstrap_token=auth_token or os.environ.get("COVEN_DEV_AUTH_TOKEN"))
-    server.runtime = RuntimeInspector(config)
+    server.runtime = RuntimeInspector(config, api_key=server.connections.api_key())
     server.namespace = "demo" if config.demo_mode else "live"
-    server.agent_adapter = build_agent_adapter(config, server.store)
+    server.agent_adapter = build_agent_adapter(config, server.store, api_key=server.connections.api_key(), connection_id=server.connections.connection_id())
     server.voice = VoiceService(config, data_dir=data_dir, profile_path=PROFILE_PATH)
     server.setup = SetupManager(config=config, data_dir=data_dir, voice=server.voice)
+    server.setup.connections = server.connections
+    server.voice_installer = VoiceInstaller(data_dir / "voice" / "installed", server.apply_voice)
     server.integrations = IntegrationManager(config)
     server.integrations.set_dynamic_workspace_roots(server.setup.workspace_roots())
     server.reconciler = None

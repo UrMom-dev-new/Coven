@@ -17,8 +17,9 @@ from .processes import background_process_options
 
 
 class RuntimeInspector:
-    def __init__(self, config: AppConfig, *, ttl_seconds: float = 15.0):
+    def __init__(self, config: AppConfig, *, ttl_seconds: float = 15.0, api_key: str | None = None):
         self.config = config
+        self.api_key = api_key
         self.ttl_seconds = ttl_seconds
         self._lock = threading.RLock()
         self._snapshot: dict[str, Any] | None = None
@@ -142,7 +143,7 @@ class RuntimeInspector:
     def _probe_hermes_api(self) -> dict[str, Any]:
         base_url = self.config.runtime.hermes_api_base_url.rstrip("/")
         key_env = self.config.runtime.hermes_api_key_env
-        api_key = os.environ.get(key_env, "")
+        api_key = self.api_key if self.api_key is not None else os.environ.get(key_env, "")
         probe: dict[str, Any] = {
             "configured": bool(base_url and api_key),
             "baseUrl": base_url or "unconfigured",

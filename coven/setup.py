@@ -64,6 +64,15 @@ class SetupManager:
         workspace_ready = bool(workspace_path and workspace_path.exists() and workspace_path.is_dir())
         voice = self.voice.status()
         hermes = self._managed_hermes_status(state)
+        hermes_required = False
+        if getattr(self, "connections", None) is not None:
+            hermes_required = True
+            connection = self.connections.status()["hermes"]
+            test = connection["test"] or {}
+            hermes = {"state": "ready" if test.get("ready") else "needs_input",
+                      "summary": test.get("message") or "Choose your Hermes runtime below, save, then test the connection.",
+                      "executable": connection["executable"], "baseUrl": connection["baseUrl"]}
+            provider_ready = bool(test.get("providerReady"))
         steps = [
             self._computer_step(),
             self._webview_step(),
@@ -78,7 +87,8 @@ class SetupManager:
                 "id": "provider",
                 "label": "Connect AI provider",
                 "state": "ready" if provider_ready else "needs_input",
-                "summary": "Provider credential is saved." if provider_ready else "Enter your own API credential or choose Explore demo.",
+                "summary": ("Hermes reports its provider is ready." if provider_ready else "Configure the provider in your selected Hermes runtime, then test its connection.") if hermes_required else
+                           ("Provider credential is saved." if provider_ready else "Enter your own API credential or choose Explore demo."),
             },
             {
                 "id": "workspace",
@@ -90,7 +100,7 @@ class SetupManager:
                 "id": "voice",
                 "label": "Enable local voice",
                 "state": "ready" if voice.get("state") == "ready" else "optional",
-                "summary": "Local voice is ready." if voice.get("state") == "ready" else "Optional; text chat can be used now.",
+                "summary": "Voice files are ready. Test your microphone below." if voice.get("state") == "ready" else "Optional; install local voice below or use text chat.",
                 "details": voice,
             },
             {
@@ -101,6 +111,8 @@ class SetupManager:
             },
         ]
         setup_complete = bool(state.get("setupComplete")) and provider_ready and workspace_ready
+        if hermes_required:
+            setup_complete = setup_complete and hermes["state"] == "ready"
         return {
             "version": __version__,
             "setupComplete": setup_complete,
@@ -109,8 +121,8 @@ class SetupManager:
             "release": {
                 "installer": WINDOWS_SETUP_ASSET,
                 "checksum": WINDOWS_CHECKSUM_ASSET,
-                "downloadPage": "https://github.com/UrMom-dev-new/HermesAvatar/releases",
-                "visibility": "private repository; testers need repository access until a separate public binary distribution is approved",
+                "downloadPage": "https://github.com/UrMom-dev-new/Coven/releases",
+                "visibility": "public repository",
             },
             "privacy": "Credentials are stored outside renderer storage. Local voice audio is transcribed locally; transcripts sent to Hermes may reach the configured provider.",
         }
