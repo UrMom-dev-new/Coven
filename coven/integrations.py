@@ -103,6 +103,14 @@ class IntegrationManager:
         }
 
     def office_status(self) -> dict[str, Any]:
+        if getattr(self, "linked_apps", None) is not None:
+            office = self.linked_apps.status()["office"]
+            linked = any(app["linked"] for app in office["apps"])
+            return {"configured": office["enabled"], "operational": False,
+                    "state": "apps_linked" if linked else "needs_link",
+                    "apps": office["apps"], "authenticated": None,
+                    "notes": [office["note"], "App links are available for interactive use. Hermes document automation requires a separately verified Office bridge."],
+                    "capabilities": ["office.open_installed_app"] if linked else []}
         if not self.config.office.enabled:
             return IntegrationStatus(
                 configured=False,
@@ -117,7 +125,9 @@ class IntegrationManager:
             notes.append("Installed Office automation requires an interactive Windows session.")
         if not powershell and not self.config.office.bridge_executable:
             notes.append("No PowerShell/bridge executable was found for Office automation.")
-        operational = os.name == "nt" and bool(powershell or self.config.office.bridge_executable)
+        # An installed shell is not evidence of an operational Office bridge.
+        operational = False
+        notes.append("Native Office automation has not been verified by a bridge worker.")
         return IntegrationStatus(
             configured=True,
             operational=operational,
@@ -144,10 +154,13 @@ class IntegrationManager:
             notes.append("Client ID is not configured.")
         if config.enabled and not token_present:
             notes.append(f"Access token environment variable {config.token_environment_variable} is not set.")
-        operational = config.enabled and bool(config.tenant_id and config.client_id and token_present)
+        operational = False
+        if config.enabled and token_present:
+            notes.append("Token presence has not been verified with Microsoft Graph; no authenticated Graph connection is established.")
         return {
             "configured": config.enabled,
-            "authenticated": token_present,
+            "authenticated": False,
+            "credentialPresent": token_present,
             "operational": operational,
             "state": "operational" if operational else "blocked",
             "cloud": config.cloud,
@@ -162,6 +175,13 @@ class IntegrationManager:
         }
 
     def govdash_status(self) -> dict[str, Any]:
+        if getattr(self, "linked_apps", None) is not None:
+            govdash = self.linked_apps.status()["govdash"]
+            return {"configured": govdash["enabled"], "operational": False, "authenticated": None,
+                    "state": "browser_linked" if govdash["enabled"] and govdash["browserAvailable"] else "needs_link",
+                    "route": "browser", "baseUrl": govdash["url"], "session": govdash["session"],
+                    "notes": [govdash["note"], "Opening a browser is not proof of authentication or permission to automate GovDash."],
+                    "capabilities": ["govdash.open_saved_browser"] if govdash["enabled"] and govdash["browserAvailable"] else []}
         config = self.config.govdash
         notes = []
         if not config.enabled:
@@ -172,7 +192,9 @@ class IntegrationManager:
             notes.append("Browser route requires a dedicated GovDash browser profile directory.")
         if config.enabled and config.route == "sharepoint" and not config.sharepoint_root:
             notes.append("SharePoint exchange route requires a configured selected SharePoint root/location.")
-        operational = config.enabled and not notes
+        operational = False
+        if config.enabled and not notes:
+            notes.append("The configured route has not been authenticated or verified with GovDash.")
         return {
             "configured": config.enabled,
             "operational": operational,

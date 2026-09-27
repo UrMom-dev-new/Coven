@@ -1190,6 +1190,9 @@ time {
 .inline-state { max-width: 100%; }
 .task-detail pre, .message pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .path-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.linked-app-row { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; }
+.linked-app-row label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
+.linked-app-row > button { justify-self: start; }
 .setup-card fieldset { display: grid; gap: 10px; border: 0; padding: 0; margin: 0; }
 .setup-card details > :not(summary) { margin-top: 10px; }
 .setup-card summary { cursor: pointer; padding: 8px 0; }

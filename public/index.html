@@ -114,6 +114,57 @@
             </div>
             <p id="hermesFeedback" class="setup-feedback" role="status" aria-live="polite">Save your selection, then test the connection. Starting Hermes here creates a protected server key if needed.</p>
           </form>
+          <form id="officeLinksForm" class="setup-card">
+            <div class="panel-heading"><h3>Microsoft Office on this computer</h3><button id="detectOfficeApps" type="button" class="secondary-button">Find installed Office</button></div>
+            <p>Link Word, Excel, and PowerPoint wherever they are installed. Your Microsoft account stays signed in through Office, including after Coven restarts.</p>
+            <label class="checkbox-label"><input id="officeLinksEnabled" type="checkbox" /> Enable Office app links</label>
+            <div class="linked-app-row">
+              <label for="officeWordPath">Word <span id="officeWordStatus" class="inline-state"></span></label>
+              <div class="path-picker"><input id="officeWordPath" type="text" spellcheck="false" placeholder="Automatically detected, or Browse to WINWORD.EXE" /><button id="browseOfficeWord" type="button" class="secondary-button">Browse…</button></div>
+              <button id="openOfficeWord" type="button" class="secondary-button" disabled>Open Word / sign in</button>
+            </div>
+            <div class="linked-app-row">
+              <label for="officeExcelPath">Excel <span id="officeExcelStatus" class="inline-state"></span></label>
+              <div class="path-picker"><input id="officeExcelPath" type="text" spellcheck="false" placeholder="Automatically detected, or Browse to EXCEL.EXE" /><button id="browseOfficeExcel" type="button" class="secondary-button">Browse…</button></div>
+              <button id="openOfficeExcel" type="button" class="secondary-button" disabled>Open Excel / sign in</button>
+            </div>
+            <div class="linked-app-row">
+              <label for="officePowerpointPath">PowerPoint <span id="officePowerpointStatus" class="inline-state"></span></label>
+              <div class="path-picker"><input id="officePowerpointPath" type="text" spellcheck="false" placeholder="Automatically detected, or Browse to POWERPNT.EXE" /><button id="browseOfficePowerpoint" type="button" class="secondary-button">Browse…</button></div>
+              <button id="openOfficePowerpoint" type="button" class="secondary-button" disabled>Open PowerPoint / sign in</button>
+            </div>
+            <div class="action-row"><button type="submit">Save Office links</button><button id="unlinkOfficeApps" type="button" class="secondary-button">Unlink Office</button></div>
+            <p id="officeLinkFeedback" class="setup-feedback" role="status" aria-live="polite"></p>
+            <p class="fine-print">Open an app and use its Account menu to check your Microsoft sign-in. Coven does not copy its passwords or tokens. These links open Office for you; agent document automation needs a verified Office bridge.</p>
+          </form>
+          <form id="govdashLinksForm" class="setup-card">
+            <h3>GovDash</h3>
+            <p>Sign in once in a separate GovDash browser window. Coven keeps that browser profile so you can resume the session next time.</p>
+            <fieldset id="govdashLinkFields">
+              <legend class="sr-only">GovDash browser connection</legend>
+              <label for="govdashAddress">GovDash address</label>
+              <input id="govdashAddress" type="url" required spellcheck="false" placeholder="https://dashboard.govdash.us/" />
+              <label for="govdashBrowser">Browser</label>
+              <select id="govdashBrowser"><option value="edge">Microsoft Edge (recommended)</option><option value="chrome">Google Chrome</option></select>
+              <details><summary>Browser location</summary>
+                <label for="govdashBrowserPath">Installed browser program</label>
+                <div class="path-picker"><input id="govdashBrowserPath" type="text" spellcheck="false" placeholder="Automatically detected browser executable" /><button id="browseGovdashBrowser" type="button" class="secondary-button">Browse…</button></div>
+              </details>
+              <button type="submit">Save GovDash connection</button>
+            </fieldset>
+            <p id="govdashSessionState" class="setup-feedback" role="status" aria-live="polite"></p>
+            <div class="action-row">
+              <button id="openGovdash" type="button" disabled>Open GovDash / sign in</button>
+              <button id="closeGovdash" type="button" class="secondary-button" disabled>Close GovDash window</button>
+              <button id="unlinkGovdash" type="button" class="secondary-button">Unlink GovDash</button>
+              <button id="forgetGovdash" type="button" class="secondary-button">Forget saved sign-in</button>
+              <button id="openGovdashDownloads" type="button" class="secondary-button">Open downloads folder</button>
+            </div>
+            <p id="govdashLinkFeedback" class="setup-feedback" role="status" aria-live="polite"></p>
+            <p class="fine-print">Sign in on GovDash’s page using your organization’s usual login or Microsoft SSO. Check your account in that window. Session expiry, MFA, and device policies still apply. This profile is separate from your everyday browser and closes with Coven.</p>
+            <p class="fine-print">Unlink keeps the saved session; Forget saved sign-in removes this connection’s browser data on this computer. Your everyday browser and Office accounts are unaffected. Agent access to GovDash is not enabled by this sign-in.</p>
+            <p class="fine-print">GovDash exports are saved in a separate downloads folder and kept when you forget sign-in. Open that folder to move a document into your chosen Coven work folder.</p>
+          </form>
           <form id="providerSetupForm" class="setup-card">
             <h3>Optional provider credential storage</h3>
             <p class="fine-print">An external Hermes runtime uses its own provider configuration. Saving a credential here does not change that runtime; configure its provider in Hermes and use Test saved connection above.</p>
