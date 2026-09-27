@@ -86,6 +86,49 @@ async function main() {
       .filter((el) => el.scrollWidth > el.clientWidth + 2).map((el) => el.id));
     assert.deepEqual(settingsOverflow, []);
 
+    // App paths and links persist through reload. Office is a file fixture here;
+    // Office account/license checks require an actual Office installation.
+    const officeFixture = path.join(root, "Office with spaces", "WINWORD.EXE");
+    fs.mkdirSync(path.dirname(officeFixture), { recursive: true });
+    fs.writeFileSync(officeFixture, "fixture only; never executed");
+    await page.locator("#officeWordPath").fill(officeFixture);
+    await page.locator("#officeLinksEnabled").check();
+    await page.locator('#officeLinksForm button[type="submit"]').click();
+    await page.waitForFunction(() => document.querySelector("#officeLinkFeedback").textContent.startsWith("Office links saved"));
+    await page.locator("#govdashAddress").fill("https://dashboard.govdash.us.evil.test/");
+    await page.locator('#govdashLinksForm button[type="submit"]').click();
+    await page.waitForFunction(() => document.querySelector("#govdashLinkFeedback").textContent.includes("official transition dashboard"));
+    await page.locator("#govdashAddress").fill("https://dashboard.govdash.us/");
+    await page.locator('#govdashLinksForm button[type="submit"]').click();
+    await page.waitForFunction(() => document.querySelector("#govdashLinkFeedback").textContent.startsWith("GovDash connection saved"));
+    await page.reload();
+    await page.locator('[data-view="settings"]').click();
+    await page.waitForFunction(() => document.querySelector("#officeWordStatus").textContent === "Linked");
+    assert.equal(await page.locator("#officeWordPath").inputValue(), officeFixture);
+    assert.equal(await page.locator("#openGovdash").isEnabled(), true);
+    assert.equal(await page.locator("#forgetGovdash").isEnabled(), false);
+    await page.locator("#officeLinksForm").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(output, "office-links.png") });
+    await page.locator("#govdashLinksForm").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(output, "govdash-link.png") });
+    await page.locator("#officeWordPath").fill("unsaved Office path");
+    await page.locator("#refreshSetupButton").click();
+    await page.waitForTimeout(1800);
+    assert.equal(await page.locator("#officeWordPath").inputValue(), "unsaved Office path");
+    await page.locator("#unlinkOfficeApps").click();
+    await page.waitForFunction(() => document.querySelector("#officeLinkFeedback").textContent.startsWith("Office unlinked"));
+    assert.equal(await page.locator("#officeWordPath").inputValue(), officeFixture);
+    await page.locator("#unlinkGovdash").click();
+    await page.waitForFunction(() => document.querySelector("#govdashLinkFeedback").textContent.startsWith("GovDash unlinked"));
+    assert.equal(await page.locator("#openGovdash").isEnabled(), false);
+    for (const width of [1280, 980, 640]) {
+      await page.setViewportSize({ width, height: 900 });
+      const overflow = await page.evaluate(() => [...document.querySelectorAll(".setup-card")]
+        .filter((el) => el.scrollWidth > el.clientWidth + 2).map((el) => el.id));
+      assert.deepEqual(overflow, [], `Settings overflow at ${width}px`);
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
+
     // Capture permissions/audio are real fake-device browser input; only the ASR
     // response is a fixture. Ensure microphone testing never executes a command.
     await page.route("**/api/voice/status", async (route) => {
@@ -114,7 +157,7 @@ async function main() {
     assert.equal(await page.locator("#selectedWitchName").textContent(), selected);
     assert.equal(dispatches, 0);
     assert.deepEqual(errors, []);
-    console.log("Settings persistence, dirty-form preservation, local-endpoint validation, microphone test isolation, and six viewport layouts passed.");
+    console.log("Settings and Office/GovDash link persistence, unlinking, dirty-form preservation, endpoint validation, microphone test isolation, and six viewport layouts passed.");
   } catch (error) {
     if (page) await page.screenshot({ path: path.join(output, "failure.png"), fullPage: true }).catch(() => {});
     throw error;

@@ -3,6 +3,7 @@ import { $, clear, field, node, restoreFocus } from "./dom.js";
 import { createSanctuaryGame } from "./game.js";
 import { sceneDurationForMotion } from "./presentation.js";
 import { createRuntimeSettings } from "./runtime-settings.js";
+import { createLinkedApps } from "./linked-apps.js";
 
 const state = {
   profiles: [],
@@ -54,6 +55,7 @@ const runtimeSettings = createRuntimeSettings({
   cancelMicrophone: () => cancelVoiceInput("Microphone test cancelled."),
   voiceChanged: refreshVoiceStatus,
 });
+const linkedApps = createLinkedApps();
 
 function profile(id = state.selectedWitch) {
   return state.profiles.find((item) => item.id === id) || state.profiles[0];
@@ -91,6 +93,8 @@ function renderOnboarding() {
 function integrationSummary(name) {
   const item = state.status?.integrations?.[name];
   if (!item?.configured) return "Not configured.";
+  if (item.state === "apps_linked") return "Office apps linked. Sign-in is managed in Office.";
+  if (item.state === "browser_linked") return "GovDash browser linked. Open it to check your sign-in.";
   if (item.operational) return "Operational.";
   return (item.notes && item.notes[0]) || "Configured but blocked.";
 }
@@ -172,6 +176,7 @@ async function refreshSetupStatus() {
   const payload = await api("/api/setup/status");
   state.setupStatus = payload.setup;
   await runtimeSettings.refresh();
+  await linkedApps.refresh();
   renderSetupWizard();
   renderOnboarding();
 }
@@ -1260,6 +1265,7 @@ function setActiveView(view) {
 }
 
 function bindEvents() {
+  linkedApps.bind();
   runtimeSettings.bind();
   $("messageForm").addEventListener("submit", sendMessage);
   $("messageInput").addEventListener("input", () => rememberMessageDraft(state.selectedWitch));

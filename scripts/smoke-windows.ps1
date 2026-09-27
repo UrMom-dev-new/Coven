@@ -2,7 +2,8 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$Exe,
   [string]$Token = "windows-build-smoke-token",
-  [int]$TimeoutSeconds = 45
+  [int]$TimeoutSeconds = 45,
+  [switch]$BrowserProfile
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,7 +31,7 @@ function Show-SelfTestLog {
 Write-Host "Running Coven.exe self-test with a $TimeoutSeconds second timeout..."
 $PreviousSelfTestLog = $env:COVEN_SELF_TEST_LOG
 $env:COVEN_SELF_TEST_LOG = $SelfTestLog
-$Smoke = Start-Process -FilePath $Exe -ArgumentList @(
+$SmokeArguments = @(
   "--self-test",
   "--auth-token",
   $Token,
@@ -38,7 +39,9 @@ $Smoke = Start-Process -FilePath $Exe -ArgumentList @(
   "12",
   "--self-test-log",
   $SelfTestLog
-) -PassThru
+)
+if ($BrowserProfile) { $SmokeArguments += "--self-test-browser" }
+$Smoke = Start-Process -FilePath $Exe -ArgumentList $SmokeArguments -PassThru
 if ($null -eq $PreviousSelfTestLog) {
   Remove-Item Env:\COVEN_SELF_TEST_LOG -ErrorAction SilentlyContinue
 } else {

@@ -200,6 +200,11 @@ def run_self_test(args: argparse.Namespace) -> int:
 
     server = None
     try:
+        if getattr(args, "self_test_browser", False):
+            from coven.browser_self_test import check_persistent_browser
+            _append_self_test_log(log_path, "checking persistent browser profile, restart, and forget")
+            check_persistent_browser()
+            _append_self_test_log(log_path, "persistent browser profile check passed")
         _append_self_test_log(log_path, "checking background voice worker startup")
         _check_voice_worker_startup(args.self_test_timeout)
         _append_self_test_log(log_path, "background voice worker startup passed")
@@ -402,6 +407,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--browser", action="store_true", help="Use the authenticated development browser instead of pywebview.")
     parser.add_argument("--demo", action="store_true", help="Run with the isolated demo namespace.")
     parser.add_argument("--self-test", action="store_true", help="Boot the local desktop service, validate bundled assets, then exit.")
+    parser.add_argument("--self-test-browser", action="store_true", help="Also verify a disposable Edge profile during --self-test.")
     parser.add_argument("--self-test-timeout", type=float, default=8.0)
     parser.add_argument("--self-test-log", type=Path, default=None)
     parser.add_argument("--debug", action="store_true")

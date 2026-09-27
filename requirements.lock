@@ -5,3 +5,4 @@
 # These are not required to run the browser-development server.
 pywebview==5.4
 pyinstaller==6.22.3
+playwright==1.63.0

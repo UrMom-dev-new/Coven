@@ -21,6 +21,7 @@ from .auth import AuthManager, has_write_intent, is_allowed_origin
 from .configuration import ConfigError, load_app_config
 from .connection_settings import ConnectionSettings
 from .integrations import IntegrationManager
+from .linked_apps import LinkedApps
 from .reconciler import TaskReconciler
 from .runtime import RuntimeInspector
 from .secrets import SecretStoreError
@@ -80,6 +81,9 @@ class CovenHTTPServer(ThreadingHTTPServer):
         connections = getattr(self, "connections", None)
         if connections is not None:
             connections.close()
+        linked_apps = getattr(self, "linked_apps", None)
+        if linked_apps is not None:
+            linked_apps.close()
         super().server_close()
 
     def apply_hermes(self) -> None:
@@ -89,6 +93,8 @@ class CovenHTTPServer(ThreadingHTTPServer):
         key = self.connections.api_key()
         self.runtime = RuntimeInspector(config, api_key=key)
         self.agent_adapter = build_agent_adapter(config, self.store, api_key=key, connection_id=self.connections.connection_id())
+        if hasattr(self.agent_adapter, "integrations"):
+            self.agent_adapter.integrations = self.integrations
         self.setup.config = config
         self.reconciler = None
         if self.namespace == "live":
@@ -256,6 +262,9 @@ class CovenHandler(BaseHTTPRequestHandler):
         elif path == "/api/setup/connections":
             if self._require_auth():
                 self._send_json({"connections": self.app.connections.status(), "installation": self.app.voice_installer.status()})
+        elif path == "/api/setup/apps":
+            if self._require_auth():
+                self._send_json({"apps": self.app.linked_apps.status()})
         elif path == "/api/voice/status":
             if self._require_auth():
                 self._send_json({"voice": self.app.voice.status()})
@@ -405,6 +414,27 @@ class CovenHandler(BaseHTTPRequestHandler):
                 self.app.connections.save_hermes(body)
                 self.app.apply_hermes()
                 self._send_json({"connections": self.app.connections.status()})
+            elif path == "/api/setup/apps/detect":
+                self.app.linked_apps.detect()
+                self._send_json({"apps": self.app.linked_apps.status()})
+            elif path == "/api/setup/apps/office":
+                self._send_json({"apps": self.app.linked_apps.save_office(body)})
+            elif path == "/api/setup/apps/office/open":
+                self._send_json(self.app.linked_apps.open_office(body.get("app")))
+            elif path == "/api/setup/apps/office/unlink":
+                self._send_json({"apps": self.app.linked_apps.unlink_office()})
+            elif path == "/api/setup/apps/govdash":
+                self._send_json({"apps": self.app.linked_apps.save_govdash(body)})
+            elif path == "/api/setup/apps/govdash/open":
+                self._send_json({"session": self.app.linked_apps.open_govdash()})
+            elif path == "/api/setup/apps/govdash/close":
+                self._send_json({"session": self.app.linked_apps.browser.close_window()})
+            elif path == "/api/setup/apps/govdash/forget":
+                self._send_json({"session": self.app.linked_apps.browser.forget()})
+            elif path == "/api/setup/apps/govdash/unlink":
+                self._send_json({"apps": self.app.linked_apps.unlink_govdash()})
+            elif path == "/api/setup/apps/govdash/downloads":
+                self._send_json(self.app.linked_apps.open_downloads())
             elif path == "/api/setup/hermes/test":
                 self._send_json({"test": self.app.connections.test_hermes()})
             elif path == "/api/setup/hermes/start":
@@ -460,7 +490,10 @@ class CovenHandler(BaseHTTPRequestHandler):
                     raise ValueError("operation must be a string.")
                 if not isinstance(payload, dict):
                     raise ValueError("payload must be an object.")
-                self._send_json({"result": self.app.integrations.execute_office_operation(operation, payload)})
+                try:
+                    self._send_json({"result": self.app.integrations.execute_office_operation(operation, payload)})
+                except RuntimeError as exc:
+                    self._send_error_json(HTTPStatus.CONFLICT, str(exc), code="integration_unavailable")
             else:
                 self._send_error_json(HTTPStatus.NOT_FOUND, "Unknown endpoint.", code="not_found")
         except PermissionError as exc:
@@ -533,7 +566,11 @@ def build_server(
     server.setup.connections = server.connections
     server.voice_installer = VoiceInstaller(data_dir / "voice" / "installed", server.apply_voice)
     server.integrations = IntegrationManager(config)
+    server.linked_apps = LinkedApps(data_dir)
+    server.integrations.linked_apps = server.linked_apps
     server.integrations.set_dynamic_workspace_roots(server.setup.workspace_roots())
+    if hasattr(server.agent_adapter, "integrations"):
+        server.agent_adapter.integrations = server.integrations
     server.reconciler = None
     if server.namespace == "live" and hasattr(server.agent_adapter, "refresh_tasks"):
         server.reconciler = TaskReconciler(server.agent_adapter)
